@@ -19,8 +19,8 @@ const INITIAL_MODE_DEFAULTS = getModeDefaults(DEFAULT_CONFIG.mode);
 const INITIAL_CONFIG: ShaderConfig = {
   mode: DEFAULT_CONFIG.mode,
   chars: INITIAL_MODE_DEFAULTS.chars,
-  charWidth: DEFAULT_CONFIG.charWidth,
-  charHeight: DEFAULT_CONFIG.charHeight,
+  charWidth: INITIAL_MODE_DEFAULTS.charWidth,
+  charHeight: INITIAL_MODE_DEFAULTS.charHeight,
   scale: DEFAULT_CONFIG.scale,
   speed: INITIAL_MODE_DEFAULTS.speed,
   brightness: DEFAULT_CONFIG.brightness,

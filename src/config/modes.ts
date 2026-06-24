@@ -12,6 +12,8 @@ export interface ShaderModeDefaults {
   chars: string;
   themeId: string;
   speed: number;
+  charWidth: number;
+  charHeight: number;
 }
 
 export interface ShaderModeDef {
@@ -46,6 +48,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       chars: STANDARD_RAMP,
       themeId: 'ocean-currents',
       speed: 0.55,
+      charWidth: 7,
+      charHeight: 12,
     },
   },
   {
@@ -58,6 +62,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       chars: DETAILED_RAMP,
       themeId: 'cyberpunk-flame',
       speed: 0.7,
+      charWidth: 7,
+      charHeight: 12,
     },
   },
   {
@@ -70,6 +76,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       chars: MINIMAL_RAMP,
       themeId: 'classic-bw',
       speed: 0.45,
+      charWidth: 7,
+      charHeight: 12,
     },
   },
   {
@@ -82,6 +90,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       chars: ASCII_RAMP,
       themeId: 'volcanic-glow',
       speed: 0.85,
+      charWidth: 5,
+      charHeight: 8,
     },
   },
   {
@@ -94,6 +104,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       chars: DETAILED_RAMP,
       themeId: 'volcanic-glow',
       speed: 0.75,
+      charWidth: 7,
+      charHeight: 12,
     },
   },
   {
@@ -106,6 +118,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       chars: BINARY_RAMP,
       themeId: 'matrix-neon',
       speed: 1.2,
+      charWidth: 13,
+      charHeight: 22,
     },
   },
   {
@@ -118,6 +132,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       chars: LIFE_RAMP,
       themeId: 'terminal-green',
       speed: 0.45,
+      charWidth: 7,
+      charHeight: 12,
     },
   },
 ];
