@@ -128,6 +128,10 @@ function wrap(value: number, limit: number) {
   return (value + limit) % limit;
 }
 
+function getAutomataCellSize(charWidth: number, charHeight: number) {
+  return Math.max(1, Math.max(charWidth, charHeight));
+}
+
 function indexOf(x: number, y: number, cols: number, rows: number) {
   return wrap(y, rows) * cols + wrap(x, cols);
 }
@@ -393,6 +397,10 @@ export function CellularAutomataShader({
     return (value + limit) % limit;
   }
 
+  function getAutomataCellSize(charWidthValue, charHeightValue) {
+    return Math.max(1, Math.max(charWidthValue, charHeightValue));
+  }
+
   function indexOf(x, y, cols, rows) {
     return wrap(y, rows) * cols + wrap(x, cols);
   }
@@ -517,8 +525,9 @@ export function CellularAutomataShader({
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    const cols = Math.max(1, Math.ceil(canvas.width / charWidth));
-    const rows = Math.max(1, Math.ceil(canvas.height / charHeight));
+    const cellSize = getAutomataCellSize(charWidth, charHeight);
+    const cols = Math.max(1, Math.ceil(canvas.width / cellSize));
+    const rows = Math.max(1, Math.ceil(canvas.height / cellSize));
     grid = makeGrid(cols, rows);
     stepAccumulator = 0;
   }
@@ -542,6 +551,7 @@ export function CellularAutomataShader({
     if (steps === 4) stepAccumulator = 0;
 
     const glyphs = normalizeGlyphs(chars);
+    const cellSize = getAutomataCellSize(charWidth, charHeight);
 
     ctx.fillStyle = 'rgb(' + colorBg[0] + ',' + colorBg[1] + ',' + colorBg[2] + ')';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -568,7 +578,7 @@ export function CellularAutomataShader({
         const finalColor = age <= 2 ? mixColor(rgbColor, [255, 255, 255], 0.32) : rgbColor;
 
         ctx.fillStyle = toRgba(finalColor, 0.42 + intensity * 0.58);
-        ctx.fillText(glyph, x * charWidth + charWidth / 2, y * charHeight + charHeight / 2);
+        ctx.fillText(glyph, x * cellSize + cellSize / 2, y * cellSize + cellSize / 2);
       }
     }
 
@@ -646,8 +656,12 @@ export function CellularAutomataShader({
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      const cols = Math.max(1, Math.ceil(width / charWidthRef.current));
-      const rows = Math.max(1, Math.ceil(height / charHeightRef.current));
+      const cellSize = getAutomataCellSize(
+        charWidthRef.current,
+        charHeightRef.current,
+      );
+      const cols = Math.max(1, Math.ceil(width / cellSize));
+      const rows = Math.max(1, Math.ceil(height / cellSize));
       gridRef.current = makeGrid(cols, rows);
       stepAccumulatorRef.current = 0;
     };
@@ -665,10 +679,13 @@ export function CellularAutomataShader({
 
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
-      const cellW = charWidthRef.current;
-      const cellH = charHeightRef.current;
-      const expectedCols = Math.max(1, Math.ceil(width / cellW));
-      const expectedRows = Math.max(1, Math.ceil(height / cellH));
+      const glyphHeight = charHeightRef.current;
+      const cellSize = getAutomataCellSize(
+        charWidthRef.current,
+        glyphHeight,
+      );
+      const expectedCols = Math.max(1, Math.ceil(width / cellSize));
+      const expectedRows = Math.max(1, Math.ceil(height / cellSize));
 
       if (
         !gridRef.current ||
@@ -697,7 +714,7 @@ export function CellularAutomataShader({
 
       ctx.fillStyle = `rgb(${bg[0]}, ${bg[1]}, ${bg[2]})`;
       ctx.fillRect(0, 0, width, height);
-      ctx.font = `bold ${Math.max(6, cellH - 2)}px monospace`;
+      ctx.font = `bold ${Math.max(6, glyphHeight - 2)}px monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
@@ -730,8 +747,8 @@ export function CellularAutomataShader({
           ctx.fillStyle = toRgba(litColor, 0.42 + intensity * 0.58);
           ctx.fillText(
             glyph,
-            x * cellW + cellW / 2,
-            y * cellH + cellH / 2,
+            x * cellSize + cellSize / 2,
+            y * cellSize + cellSize / 2,
           );
         }
       }
