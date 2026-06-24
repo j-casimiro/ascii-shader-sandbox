@@ -1,21 +1,22 @@
-import type { ShaderMode } from '@/types/shader'
+import type { ShaderMode } from '@/types/shader';
 
 export interface ShaderModeDef {
-  mode: ShaderMode
-  name: string
+  mode: ShaderMode;
+  name: string;
   /** Short hint shown under the selector. */
-  description: string
+  description: string;
   /** Whether the Noise Zoom / Scale control applies (modes 0, 1, 4 only). */
-  usesScale: boolean
+  usesScale: boolean;
   /** Whether this effect renders in its own dedicated component/context. */
-  separateComponent: boolean
+  separateComponent: boolean;
 }
 
 /**
- * The 7 shader algorithms. Modes 0–4 share one WebGL1 context + fragment shader
- * (switched on `u_mode`); modes 5 and 6 own their contexts in separate
- * components. Effects/shaders themselves are authored later — this only
- * describes the selectable set and which controls each mode exposes.
+ * The selectable shader *algorithms*. Modes 0/2/4 share one WebGL1 context +
+ * fragment shader (switched on `u_mode`); modes 5 and 6 own their contexts in
+ * separate components. Mode 3 (Source Image) is intentionally absent: it is not
+ * an algorithm but an input source, toggled via its own panel (`imageEnabled`),
+ * and rendered by the shared WebGL1 fragment shader's `u_mode == 3` branch.
  */
 export const SHADER_MODES: ShaderModeDef[] = [
   {
@@ -29,13 +30,6 @@ export const SHADER_MODES: ShaderModeDef[] = [
     mode: 2,
     name: 'Plasma',
     description: 'Layered sine interference.',
-    usesScale: false,
-    separateComponent: false,
-  },
-  {
-    mode: 3,
-    name: 'Source Image',
-    description: 'ASCII-ify an uploaded image.',
     usesScale: false,
     separateComponent: false,
   },
@@ -60,19 +54,19 @@ export const SHADER_MODES: ShaderModeDef[] = [
     usesScale: false,
     separateComponent: true,
   },
-]
+];
 
 export function getModeDef(mode: ShaderMode): ShaderModeDef {
-  return SHADER_MODES.find((m) => m.mode === mode) ?? SHADER_MODES[0]
+  return SHADER_MODES.find((m) => m.mode === mode) ?? SHADER_MODES[0];
 }
 
 /** Default live configuration. */
 export const DEFAULT_CONFIG = {
   mode: 0 as ShaderMode,
-  charWidth: 10,
-  charHeight: 16,
+  charWidth: 7,
+  charHeight: 12,
   scale: 4.0,
-  speed: 1.0,
+  speed: 0.6,
   brightness: 1.0,
   crt: false,
-}
+};

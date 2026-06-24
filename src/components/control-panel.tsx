@@ -40,7 +40,8 @@ export function ControlPanel({
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    onChange({ imageSrc: url });
+    // Uploading auto-enables image rendering so it shows immediately.
+    onChange({ imageSrc: url, imageEnabled: true });
   }
 
   return (
@@ -65,49 +66,75 @@ export function ControlPanel({
         <p className="text-xs text-muted-foreground">{modeDef.description}</p>
       </ControlSection>
 
-      {/* ── Source Image (mode 3 only) ───────────────────────────────── */}
-      {config.mode === 3 && (
-        <ControlSection title="Source Image">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageUpload}
-          />
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlus />
-              {config.imageSrc ? 'Replace image' : 'Upload image'}
-            </Button>
-            {config.imageSrc && (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => onChange({ imageSrc: null })}
-              >
-                <Trash2 />
-                <span className="sr-only">Remove image</span>
-              </Button>
-            )}
-          </div>
-          <div className="flex items-center justify-between">
-            <Label htmlFor="use-colors" className="text-xs">
-              Use image colors
-            </Label>
-            <Switch
-              id="use-colors"
-              checked={config.imageUseColors}
-              onCheckedChange={(c) => onChange({ imageUseColors: c })}
+      {/* ── Source Image (dedicated input source, not an algorithm) ───── */}
+      <ControlSection title="Source Image">
+        <p className="text-xs text-muted-foreground">
+          Render an uploaded image as ASCII, overriding the algorithm above.
+        </p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageUpload}
+        />
+        {config.imageSrc && (
+          <div className="overflow-hidden rounded-md border border-border">
+            <img
+              src={config.imageSrc}
+              alt="Source preview"
+              className="block max-h-32 w-full object-cover"
             />
           </div>
-        </ControlSection>
-      )}
+        )}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImagePlus />
+            {config.imageSrc ? 'Replace image' : 'Upload image'}
+          </Button>
+          {config.imageSrc && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() =>
+                onChange({ imageSrc: null, imageEnabled: false })
+              }
+            >
+              <Trash2 />
+              <span className="sr-only">Remove image</span>
+            </Button>
+          )}
+        </div>
+        {config.imageSrc && (
+          <>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="image-enabled" className="text-xs">
+                Show on canvas
+              </Label>
+              <Switch
+                id="image-enabled"
+                checked={config.imageEnabled}
+                onCheckedChange={(c) => onChange({ imageEnabled: c })}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="use-colors" className="text-xs">
+                Use image colors
+              </Label>
+              <Switch
+                id="use-colors"
+                checked={config.imageUseColors}
+                onCheckedChange={(c) => onChange({ imageUseColors: c })}
+              />
+            </div>
+          </>
+        )}
+      </ControlSection>
 
       {/* ── Character size ───────────────────────────────────────────── */}
       <ControlSection title="Character Size">

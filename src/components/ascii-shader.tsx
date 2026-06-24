@@ -24,6 +24,7 @@ const INITIAL_CONFIG: ShaderConfig = {
   crt: DEFAULT_CONFIG.crt,
   themeId: DEFAULT_THEME_ID,
   imageSrc: null,
+  imageEnabled: false,
   imageUseColors: false,
 };
 
@@ -68,9 +69,13 @@ export function AsciiShader() {
   }, []);
 
   const modeDef = getModeDef(config.mode);
+  // The source image overrides the selected algorithm when enabled, including
+  // the separate-component effects (Blackhole / Turing).
+  const imageActive = config.imageEnabled && !!config.imageSrc;
+  const activeLabel = imageActive ? 'Source Image' : modeDef.name;
 
   function renderActiveShader() {
-    if (config.mode === 5) {
+    if (!imageActive && config.mode === 5) {
       return (
         <BlackholeShader
           chars={config.chars}
@@ -90,7 +95,7 @@ export function AsciiShader() {
         />
       );
     }
-    if (config.mode === 6) {
+    if (!imageActive && config.mode === 6) {
       return (
         <TuringShader
           chars={config.chars}
@@ -162,7 +167,7 @@ export function AsciiShader() {
         {/* Constrained right sidebar of controls. */}
         <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto pr-1">
           <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            {modeDef.name}
+            {activeLabel}
           </p>
           <ControlPanel
             config={config}

@@ -68,9 +68,15 @@ export interface ShaderConfig {
   crt: boolean
   /** Active color theme id (resolves into COLOR_THEMES). */
   themeId: string
-  /** Mode 3: uploaded source image (object URL or data URL). */
+  /** Source Image: uploaded image (object URL or data URL). */
   imageSrc: string | null
-  /** Mode 3: passthrough the image's own colors instead of theme tint. */
+  /**
+   * Source Image: when true (and an image is loaded), the canvas renders the
+   * image instead of the selected algorithm. Decoupled from `mode` so the
+   * algorithm dropdown stays purely about procedural effects.
+   */
+  imageEnabled: boolean
+  /** Source Image: passthrough the image's own colors instead of theme tint. */
   imageUseColors: boolean
 }
 

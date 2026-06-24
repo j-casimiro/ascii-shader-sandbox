@@ -35,6 +35,11 @@ const FRAGMENT_SHADER = `
   uniform float u_scale;
   uniform int   u_mode;
 
+  // Source-image uniforms (mode 3)
+  uniform sampler2D u_image;
+  uniform float u_image_aspect;       // image width / height
+  uniform int   u_use_image_colors;   // 1 = passthrough image color, 0 = theme tint
+
   // Color theme uniforms
   uniform int   u_color_mode;
   uniform vec3  u_color_solid;
@@ -92,6 +97,27 @@ const FRAGMENT_SHADER = `
     return sqrt(minDist);
   }
 
+  // ── Source image sampling (mode 3) ────────────────────────────────
+  // "Cover" fit: scale the sampled region so the image fills the canvas with
+  // no stretching (overflow on the long axis is cropped). Y is flipped because
+  // the GL texture origin is bottom-left while images decode top-left.
+  vec2 imageUv(vec2 uv) {
+    float ca = u_resolution.x / u_resolution.y;
+    float ia = max(u_image_aspect, 0.0001);
+    vec2 c = uv - 0.5;
+    if (ca > ia) {
+      c.y *= ia / ca;                 // canvas wider: fit width, crop height
+    } else {
+      c.x *= ca / ia;                 // canvas taller: fit height, crop width
+    }
+    c += 0.5;
+    return vec2(c.x, 1.0 - c.y);
+  }
+
+  vec3 sampleImage(vec2 uv) {
+    return texture2D(u_image, imageUv(uv)).rgb;
+  }
+
   // ── Effect intensity, branched on u_mode ──────────────────────────
   float computeIntensity(vec2 uv) {
     if (u_mode == 0) {
@@ -133,8 +159,12 @@ const FRAGMENT_SHADER = `
       p *= u_scale;
       float d = worley(p);
       return 1.0 - clamp(d, 0.0, 1.0);         // bright cell centers, dark borders
+    } else if (u_mode == 3) {
+      // Mode 3 — Source Image: glyph intensity = perceptual luminance of the
+      // sampled pixel, so darker regions map to sparser glyphs.
+      vec3 rgb = sampleImage(uv);
+      return dot(rgb, vec3(0.299, 0.587, 0.114));
     }
-    // TODO: mode 3 (Source Image). Authored in its own task.
     return 0.0;
   }
 
@@ -170,6 +200,9 @@ const FRAGMENT_SHADER = `
     float charIntensity = texture2D(u_font_atlas, fontUv).r;
 
     vec3 color = getColor(val, uv);
+    if (u_mode == 3 && u_use_image_colors == 1) {
+      color = sampleImage(uv);                 // passthrough the image's own color
+    }
     gl_FragColor = vec4(mix(u_color_bg, color, charIntensity), 1.0);
   }
 `
@@ -202,6 +235,11 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const glRef = useRef<WebGLRenderingContext | null>(null)
   const fontAtlasTextureRef = useRef<WebGLTexture | null>(null)
+  const imageTextureRef = useRef<WebGLTexture | null>(null)
+  const imageAspectRef = useRef(1)
+
+  // Whether the source image overrides the selected algorithm (renders mode 3).
+  const imageActive = config.imageEnabled && !!config.imageSrc
 
   // Live values read through refs so the render loop is set up only once.
   const charsRef = useRef(config.chars)
@@ -211,6 +249,8 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
   const speedRef = useRef(config.speed)
   const brightnessRef = useRef(config.brightness)
   const modeRef = useRef(config.mode)
+  const imageActiveRef = useRef(imageActive)
+  const imageUseColorsRef = useRef(config.imageUseColors)
   const colorModeRef = useRef(theme.mode)
   const colorSolidRef = useRef(hexToRgb(theme.accent))
   const colorGradStartRef = useRef(hexToRgb(theme.gradStart))
@@ -225,12 +265,14 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
     speedRef.current = config.speed
     brightnessRef.current = config.brightness
     modeRef.current = config.mode
+    imageActiveRef.current = imageActive
+    imageUseColorsRef.current = config.imageUseColors
     colorModeRef.current = theme.mode
     colorSolidRef.current = hexToRgb(theme.accent)
     colorGradStartRef.current = hexToRgb(theme.gradStart)
     colorGradEndRef.current = hexToRgb(theme.gradEnd)
     colorBgRef.current = hexToRgb(theme.bg)
-  }, [config, theme])
+  }, [config, theme, imageActive])
 
   // Pre-bake the font atlas: a horizontal strip of every ramp glyph, drawn in
   // bold white monospace on black. LUMINANCE / NEAREST / CLAMP_TO_EDGE keeps
@@ -284,6 +326,45 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
     const gl = glRef.current
     if (gl) buildFontAtlas(gl, config.chars, config.charWidth, config.charHeight)
   }, [config.chars, config.charWidth, config.charHeight, buildFontAtlas])
+
+  // Load the source image into a GPU texture whenever the upload changes.
+  // LINEAR filtering keeps the down-sampled image smooth across cells.
+  useEffect(() => {
+    const src = config.imageSrc
+    if (!src) {
+      const gl = glRef.current
+      if (gl && imageTextureRef.current) {
+        gl.deleteTexture(imageTextureRef.current)
+        imageTextureRef.current = null
+      }
+      return
+    }
+
+    let cancelled = false
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const gl = glRef.current
+      if (cancelled || !gl) return
+      if (imageTextureRef.current) gl.deleteTexture(imageTextureRef.current)
+
+      const texture = gl.createTexture()
+      gl.bindTexture(gl.TEXTURE_2D, texture)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+
+      imageTextureRef.current = texture
+      imageAspectRef.current = img.height > 0 ? img.width / img.height : 1
+    }
+    img.src = src
+
+    return () => {
+      cancelled = true
+    }
+  }, [config.imageSrc])
 
   // WebGL1 initialization + render loop (set up once).
   useEffect(() => {
@@ -352,6 +433,9 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
       'u_color_grad_start',
       'u_color_grad_end',
       'u_color_bg',
+      'u_image',
+      'u_image_aspect',
+      'u_use_image_colors',
     ]) {
       u[name] = gl.getUniformLocation(program, name)
     }
@@ -390,7 +474,13 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
       gl.uniform1f(u.u_brightness, brightnessRef.current)
       gl.uniform1f(u.u_time, elapsed)
       gl.uniform1f(u.u_scale, scaleRef.current)
-      gl.uniform1i(u.u_mode, modeRef.current)
+      // Render mode 3 (source image) only once the texture has finished
+      // loading; until then fall back to the selected algorithm.
+      const renderMode =
+        imageActiveRef.current && imageTextureRef.current ? 3 : modeRef.current
+      gl.uniform1i(u.u_mode, renderMode)
+      gl.uniform1f(u.u_image_aspect, imageAspectRef.current)
+      gl.uniform1i(u.u_use_image_colors, imageUseColorsRef.current ? 1 : 0)
       gl.uniform1i(u.u_color_mode, colorModeRef.current)
       gl.uniform3fv(u.u_color_solid, colorSolidRef.current)
       gl.uniform3fv(u.u_color_grad_start, colorGradStartRef.current)
@@ -401,6 +491,12 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
         gl.activeTexture(gl.TEXTURE0)
         gl.bindTexture(gl.TEXTURE_2D, fontAtlasTextureRef.current)
         gl.uniform1i(u.u_font_atlas, 0)
+      }
+
+      if (imageTextureRef.current) {
+        gl.activeTexture(gl.TEXTURE1)
+        gl.bindTexture(gl.TEXTURE_2D, imageTextureRef.current)
+        gl.uniform1i(u.u_image, 1)
       }
 
       gl.drawArrays(gl.TRIANGLES, 0, 6)
@@ -414,6 +510,10 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
       if (fontAtlasTextureRef.current) {
         gl.deleteTexture(fontAtlasTextureRef.current)
         fontAtlasTextureRef.current = null
+      }
+      if (imageTextureRef.current) {
+        gl.deleteTexture(imageTextureRef.current)
+        imageTextureRef.current = null
       }
       gl.deleteProgram(program)
       gl.deleteBuffer(buffer)
