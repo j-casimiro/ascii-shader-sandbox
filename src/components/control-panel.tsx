@@ -23,14 +23,14 @@ import type { ShaderConfig, ShaderMode } from '@/types/shader';
 interface ControlPanelProps {
   config: ShaderConfig;
   onChange: (patch: Partial<ShaderConfig>) => void;
-  onCopyHtml: () => void;
+  onExportHtml: () => void;
   onDownloadPng: () => void;
 }
 
 export function ControlPanel({
   config,
   onChange,
-  onCopyHtml,
+  onExportHtml,
   onDownloadPng,
 }: ControlPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -269,9 +269,9 @@ export function ControlPanel({
 
       {/* ── Export ───────────────────────────────────────────────────── */}
       <ControlSection title="Export">
-        <Button variant="outline" className="w-full" onClick={onCopyHtml}>
+        <Button variant="outline" className="w-full" onClick={onExportHtml}>
           <Code2 />
-          Copy Styled HTML Embed
+          Export HTML File
         </Button>
         <Button variant="outline" className="w-full" onClick={onDownloadPng}>
           <Download />

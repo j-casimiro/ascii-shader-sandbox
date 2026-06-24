@@ -103,4 +103,5 @@ export interface ShaderProps {
   isParentScreensaver?: boolean
   onExitParentScreensaver?: () => void
   externalCanvasRef?: RefObject<HTMLCanvasElement | null> // for exports
+  exportRef?: RefObject<{ getHtml?: () => Promise<string> | string } | null>
 }

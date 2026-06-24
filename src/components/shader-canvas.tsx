@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef } from 'react'
 
 import { cn } from '@/lib/utils'
 import type { ColorTheme, ShaderConfig } from '@/types/shader'
+import { toBase64 } from '@/lib/export'
 
 interface ShaderCanvasProps {
   config: ShaderConfig
   theme: ColorTheme
   /** Forwarded so exports can read back the framebuffer. */
   canvasRef: React.RefObject<HTMLCanvasElement | null>
+  exportRef?: React.RefObject<{ getHtml?: () => Promise<string> | string } | null>
 }
 
 // ─── Vertex Shader (GLSL ES 1.00) ─────────────────────────────────────
@@ -34,6 +36,7 @@ const FRAGMENT_SHADER = `
   uniform float u_time;
   uniform float u_scale;
   uniform int   u_mode;
+  uniform int   u_is_data_pass;
 
   // Source-image uniforms (mode 3)
   uniform sampler2D u_image;
@@ -196,13 +199,20 @@ const FRAGMENT_SHADER = `
     val = clamp(val, 0.0, 1.0);
 
     float charIdx = clamp(floor(val * u_char_count), 0.0, u_char_count - 1.0);
-    vec2  fontUv  = vec2((charIdx + localCoords.x) / u_char_count, localCoords.y);
-    float charIntensity = texture2D(u_font_atlas, fontUv).r;
-
+    
     vec3 color = getColor(val, uv);
     if (u_mode == 3 && u_use_image_colors == 1) {
       color = sampleImage(uv);                 // passthrough the image's own color
     }
+
+    if (u_is_data_pass == 1) {
+      gl_FragColor = vec4(charIdx / 255.0, color.r, color.g, color.b);
+      return;
+    }
+
+    vec2  fontUv  = vec2((charIdx + localCoords.x) / u_char_count, localCoords.y);
+    float charIntensity = texture2D(u_font_atlas, fontUv).r;
+
     gl_FragColor = vec4(mix(u_color_bg, color, charIntensity), 1.0);
   }
 `
@@ -231,9 +241,10 @@ type UniformMap = Record<string, WebGLUniformLocation | null>
  * Currently only mode 0 (Noise Field) is implemented; the other branches are
  * scaffolded and authored in their own tasks.
  */
-export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
+export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const glRef = useRef<WebGLRenderingContext | null>(null)
+  const programRef = useRef<WebGLProgram | null>(null)
   const fontAtlasTextureRef = useRef<WebGLTexture | null>(null)
   const imageTextureRef = useRef<WebGLTexture | null>(null)
   const imageAspectRef = useRef(1)
@@ -407,6 +418,7 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
       return
     }
     gl.useProgram(program)
+    programRef.current = program
 
     // Full-screen quad.
     const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
@@ -436,6 +448,7 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
       'u_image',
       'u_image_aspect',
       'u_use_image_colors',
+      'u_is_data_pass',
     ]) {
       u[name] = gl.getUniformLocation(program, name)
     }
@@ -486,6 +499,7 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
       gl.uniform3fv(u.u_color_grad_start, colorGradStartRef.current)
       gl.uniform3fv(u.u_color_grad_end, colorGradEndRef.current)
       gl.uniform3fv(u.u_color_bg, colorBgRef.current)
+      gl.uniform1i(u.u_is_data_pass, 0)
 
       if (fontAtlasTextureRef.current) {
         gl.activeTexture(gl.TEXTURE0)
@@ -518,8 +532,231 @@ export function ShaderCanvas({ config, theme, canvasRef }: ShaderCanvasProps) {
       gl.deleteProgram(program)
       gl.deleteBuffer(buffer)
       glRef.current = null
+      programRef.current = null
     }
   }, [canvasRef, buildFontAtlas])
+
+  useEffect(() => {
+    if (exportRef) {
+      exportRef.current = {
+        getHtml: async () => {
+          let inlinedImageSrc = ''
+          if (config.imageEnabled && config.imageSrc) {
+            inlinedImageSrc = await toBase64(config.imageSrc)
+          }
+
+          const setupJsCode = `
+(function() {
+  const canvas = document.getElementById('canvas');
+  const gl = canvas.getContext('webgl');
+  if (!gl) {
+    console.error('WebGL not supported');
+    return;
+  }
+
+  const vsSource = \`${VERTEX_SHADER.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+  const fsSource = \`${FRAGMENT_SHADER.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+
+  function createShader(type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(shader));
+      return null;
+    }
+    return shader;
+  }
+
+  const vs = createShader(gl.VERTEX_SHADER, vsSource);
+  const fs = createShader(gl.FRAGMENT_SHADER, fsSource);
+  const program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  gl.useProgram(program);
+
+  const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+  const posLoc = gl.getAttribLocation(program, 'position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  const uniforms = {};
+  [
+    'u_font_atlas', 'u_resolution', 'u_grid_size', 'u_char_count', 'u_brightness',
+    'u_time', 'u_scale', 'u_mode', 'u_color_mode', 'u_color_solid',
+    'u_color_grad_start', 'u_color_grad_end', 'u_color_bg', 'u_image',
+    'u_image_aspect', 'u_use_image_colors', 'u_is_data_pass'
+  ].forEach(name => {
+    uniforms[name] = gl.getUniformLocation(program, name);
+  });
+
+  const chars = ${JSON.stringify(config.chars)};
+  const charWidth = ${config.charWidth};
+  const charHeight = ${config.charHeight};
+
+  function buildFontAtlas(charsList, w, h) {
+    const atlasCanvas = document.createElement('canvas');
+    const ctx = atlasCanvas.getContext('2d');
+    atlasCanvas.width = Math.max(1, w * charsList.length);
+    atlasCanvas.height = h;
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, atlasCanvas.width, atlasCanvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold ' + (h - 2) + 'px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < charsList.length; i++) {
+      ctx.fillText(charsList[i], i * w + w / 2, h / 2);
+    }
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, gl.LUMINANCE, gl.UNSIGNED_BYTE, atlasCanvas);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return texture;
+  }
+  const fontAtlasTexture = buildFontAtlas(chars, charWidth, charHeight);
+
+  let imageTexture = null;
+  let imageAspect = 1.0;
+  const imageSrc = ${JSON.stringify(inlinedImageSrc)};
+  const imageActive = ${config.imageEnabled && !!config.imageSrc};
+
+  if (imageActive && imageSrc) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      imageTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, imageTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      imageAspect = img.width / img.height;
+    };
+    img.src = imageSrc;
+  }
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function hexToRgb(hex) {
+    const clean = hex.replace('#', '');
+    return [
+      parseInt(clean.substring(0, 2), 16) / 255,
+      parseInt(clean.substring(2, 4), 16) / 255,
+      parseInt(clean.substring(4, 6), 16) / 255
+    ];
+  }
+  const colorSolid = hexToRgb(${JSON.stringify(theme.accent)});
+  const colorGradStart = hexToRgb(${JSON.stringify(theme.gradStart)});
+  const colorGradEnd = hexToRgb(${JSON.stringify(theme.gradEnd)});
+  const colorBg = hexToRgb(${JSON.stringify(theme.bg)});
+
+  let elapsed = 0;
+  let prevTime = 0;
+  const speed = ${config.speed};
+
+  function render(ts) {
+    if (prevTime === 0) prevTime = ts;
+    const dt = (ts - prevTime) / 1000;
+    prevTime = ts;
+    elapsed += dt * speed;
+
+    gl.uniform2f(uniforms.u_resolution, canvas.width, canvas.height);
+    gl.uniform2f(uniforms.u_grid_size, charWidth, charHeight);
+    gl.uniform1f(uniforms.u_char_count, chars.length);
+    gl.uniform1f(uniforms.u_brightness, ${config.brightness});
+    gl.uniform1f(uniforms.u_time, elapsed);
+    gl.uniform1f(uniforms.u_scale, ${config.scale});
+    gl.uniform1i(uniforms.u_mode, imageActive && imageTexture ? 3 : ${config.mode});
+    gl.uniform1f(uniforms.u_image_aspect, imageAspect);
+    gl.uniform1i(uniforms.u_use_image_colors, ${config.imageUseColors ? 1 : 0});
+    gl.uniform1i(uniforms.u_color_mode, ${theme.mode});
+    gl.uniform3fv(uniforms.u_color_solid, colorSolid);
+    gl.uniform3fv(uniforms.u_color_grad_start, colorGradStart);
+    gl.uniform3fv(uniforms.u_color_grad_end, colorGradEnd);
+    gl.uniform3fv(uniforms.u_color_bg, colorBg);
+    gl.uniform1i(uniforms.u_is_data_pass, 0);
+
+    if (fontAtlasTexture) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, fontAtlasTexture);
+      gl.uniform1i(uniforms.u_font_atlas, 0);
+    }
+    if (imageTexture) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, imageTexture);
+      gl.uniform1i(uniforms.u_image, 1);
+    }
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+})();
+`
+
+          return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ASCII Shader Sandbox Export</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: ${theme.bg};
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    ${config.crt ? `
+    .crt-overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0px, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 3px);
+      mix-blend-mode: multiply;
+      z-index: 999;
+    }
+    ` : ''}
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  ${config.crt ? '<div class="crt-overlay"></div>' : ''}
+  <script>
+    ${setupJsCode}
+  </script>
+</body>
+</html>`
+        }
+      }
+    }
+    return () => {
+      if (exportRef) {
+        exportRef.current = null
+      }
+    }
+  }, [config, theme, canvasRef, exportRef])
 
   return (
     <div ref={containerRef} className="relative h-full w-full">

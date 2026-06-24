@@ -37,6 +37,7 @@ const FRAGMENT_SHADER = `
   // Font atlas
   uniform sampler2D u_font_atlas;
   uniform float     u_char_count;
+  uniform int       u_is_data_pass;
 
   varying vec2 vUv;
 
@@ -236,6 +237,11 @@ const FRAGMENT_SHADER = `
     float charIdx = floor(val * u_char_count);
     charIdx = clamp(charIdx, 0.0, u_char_count - 1.0);
 
+    if (u_is_data_pass == 1) {
+      gl_FragColor = vec4(charIdx / 255.0, color.r, color.g, color.b);
+      return;
+    }
+
     vec2 fontUv = vec2((charIdx + localCoords.x) / u_char_count, localCoords.y);
     float charIntensity = texture2D(u_font_atlas, fontUv).r;
 
@@ -277,9 +283,11 @@ export function BlackholeShader({
   colorGradEnd = '#ffbb00',
   colorBg = '#000000',
   externalCanvasRef,
+  exportRef,
 }: ShaderProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const glRef = useRef<WebGLRenderingContext | null>(null);
+  const programRef = useRef<WebGLProgram | null>(null);
   const fontAtlasTextureRef = useRef<WebGLTexture | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
   const timeRef = useRef(0);
@@ -374,6 +382,193 @@ export function BlackholeShader({
     if (gl) buildFontAtlas(gl, chars, charWidth, charHeight);
   }, [chars, charWidth, charHeight, buildFontAtlas]);
 
+  useEffect(() => {
+    if (exportRef) {
+      exportRef.current = {
+        getHtml: () => {
+          const setupJsCode = `
+(function() {
+  const canvas = document.getElementById('canvas');
+  const gl = canvas.getContext('webgl');
+  if (!gl) {
+    console.error('WebGL not supported');
+    return;
+  }
+
+  const vsSource = \`${VERTEX_SHADER.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+  const fsSource = \`${FRAGMENT_SHADER.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+
+  function createShader(type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(shader));
+      return null;
+    }
+    return shader;
+  }
+
+  const vs = createShader(gl.VERTEX_SHADER, vsSource);
+  const fs = createShader(gl.FRAGMENT_SHADER, fsSource);
+  const program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  gl.useProgram(program);
+
+  const vertices = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+  const posLoc = gl.getAttribLocation(program, 'position');
+  gl.enableVertexAttribArray(posLoc);
+  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+  const uniforms = {};
+  [
+    'u_resolution', 'u_time', 'u_grid_size', 'u_speed', 'u_brightness',
+    'u_color_mode', 'u_color_solid', 'u_color_grad_start', 'u_color_grad_end',
+    'u_color_bg', 'u_font_atlas', 'u_char_count', 'u_is_data_pass'
+  ].forEach(name => {
+    uniforms[name] = gl.getUniformLocation(program, name);
+  });
+
+  const chars = ${JSON.stringify(chars)};
+  const charWidth = ${charWidth};
+  const charHeight = ${charHeight};
+
+  function buildFontAtlas(charsList, w, h) {
+    const atlasCanvas = document.createElement('canvas');
+    const ctx = atlasCanvas.getContext('2d');
+    atlasCanvas.width = Math.max(1, w * charsList.length);
+    atlasCanvas.height = h;
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, atlasCanvas.width, atlasCanvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold ' + (h - 2) + 'px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < charsList.length; i++) {
+      ctx.fillText(charsList[i], i * w + w / 2, h / 2);
+    }
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, gl.LUMINANCE, gl.UNSIGNED_BYTE, atlasCanvas);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return texture;
+  }
+  const fontAtlasTexture = buildFontAtlas(chars, charWidth, charHeight);
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function hexToRgb(hex) {
+    const clean = hex.replace('#', '');
+    return [
+      parseInt(clean.substring(0, 2), 16) / 255,
+      parseInt(clean.substring(2, 4), 16) / 255,
+      parseInt(clean.substring(4, 6), 16) / 255
+    ];
+  }
+  const colorSolid = hexToRgb(${JSON.stringify(colorSolid)});
+  const colorGradStart = hexToRgb(${JSON.stringify(colorGradStart)});
+  const colorGradEnd = hexToRgb(${JSON.stringify(colorGradEnd)});
+  const colorBg = hexToRgb(${JSON.stringify(colorBg)});
+
+  let elapsed = 0;
+  let prevTime = 0;
+  const speed = ${speed};
+
+  function render(ts) {
+    if (prevTime === 0) prevTime = ts;
+    const dt = (ts - prevTime) / 1000;
+    prevTime = ts;
+    elapsed += dt * speed;
+
+    gl.uniform2f(uniforms.u_resolution, canvas.width, canvas.height);
+    gl.uniform1f(uniforms.u_time, elapsed);
+    gl.uniform2f(uniforms.u_grid_size, charWidth, charHeight);
+    gl.uniform1f(uniforms.u_char_count, chars.length);
+    gl.uniform1f(uniforms.u_speed, speed);
+    gl.uniform1f(uniforms.u_brightness, ${brightness});
+    gl.uniform1i(uniforms.u_color_mode, ${colorMode});
+    gl.uniform3fv(uniforms.u_color_solid, colorSolid);
+    gl.uniform3fv(uniforms.u_color_grad_start, colorGradStart);
+    gl.uniform3fv(uniforms.u_color_grad_end, colorGradEnd);
+    gl.uniform3fv(uniforms.u_color_bg, colorBg);
+    gl.uniform1i(uniforms.u_is_data_pass, 0);
+
+    if (fontAtlasTexture) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, fontAtlasTexture);
+      gl.uniform1i(uniforms.u_font_atlas, 0);
+    }
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+})();
+`
+
+          return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ASCII Blackhole Shader Export</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: ${colorBg};
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    ${crt ? `
+    .crt-overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0px, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 3px);
+      mix-blend-mode: multiply;
+      z-index: 999;
+    }
+    ` : ''}
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  ${crt ? '<div class="crt-overlay"></div>' : ''}
+  <script>
+    ${setupJsCode}
+  </script>
+</body>
+</html>`
+        }
+      };
+    }
+    return () => {
+      if (exportRef) {
+        exportRef.current = null;
+      }
+    };
+  }, [crt, exportRef]);
+
   // WebGL1 initialization + render loop (set up once).
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -414,6 +609,7 @@ export function BlackholeShader({
       return;
     }
     gl.useProgram(program);
+    programRef.current = program;
 
     // Full-screen quad.
     const vertices = new Float32Array([
@@ -498,6 +694,10 @@ export function BlackholeShader({
         gl.getUniformLocation(program, 'u_color_bg'),
         colorBgRef.current,
       );
+      gl.uniform1i(
+        gl.getUniformLocation(program, 'u_is_data_pass'),
+        0,
+      );
 
       // Bind font atlas
       if (fontAtlasTextureRef.current) {
@@ -517,6 +717,8 @@ export function BlackholeShader({
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
       }
+      glRef.current = null;
+      programRef.current = null;
       if (fontAtlasTextureRef.current) {
         gl.deleteTexture(fontAtlasTextureRef.current);
         fontAtlasTextureRef.current = null;

@@ -292,6 +292,7 @@ export function CellularAutomataShader({
   colorGradEnd = '#f8fafc',
   colorBg = '#000000',
   externalCanvasRef,
+  exportRef,
 }: ShaderProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
@@ -332,6 +333,299 @@ export function CellularAutomataShader({
     colorGradEnd,
     colorBg,
   ]);
+
+  useEffect(() => {
+    if (exportRef) {
+      exportRef.current = {
+        getHtml: () => {
+          const setupJsCode = `
+(function() {
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const DEFAULT_LIFE_GLYPHS = ' .,:;ox%#@';
+  const BLOCK_GLYPHS = new Set(['█', '▓', '▒', '░', '▄', '▀', '▌', '▐']);
+
+  const GLIDER = [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]];
+  const LIGHTWEIGHT_SPACESHIP = [[1, 0], [4, 0], [0, 1], [0, 2], [4, 2], [0, 3], [1, 3], [2, 3], [3, 3]];
+  const PENTOMINO = [[1, 0], [2, 0], [0, 1], [1, 1], [1, 2]];
+  const PULSAR = [
+    [2, 0], [3, 0], [4, 0], [8, 0], [9, 0], [10, 0],
+    [0, 2], [5, 2], [7, 2], [12, 2],
+    [0, 3], [5, 3], [7, 3], [12, 3],
+    [0, 4], [5, 4], [7, 4], [12, 4],
+    [2, 5], [3, 5], [4, 5], [8, 5], [9, 5], [10, 5],
+    [2, 7], [3, 7], [4, 7], [8, 7], [9, 7], [10, 7],
+    [0, 8], [5, 8], [7, 8], [12, 8],
+    [0, 9], [5, 9], [7, 9], [12, 9],
+    [0, 10], [5, 10], [7, 10], [12, 10],
+    [2, 12], [3, 12], [4, 12], [8, 12], [9, 12], [10, 12]
+  ];
+  const SEEDS = [GLIDER, LIGHTWEIGHT_SPACESHIP, PENTOMINO, PULSAR];
+
+  function hexToRgb(hex) {
+    const clean = hex.replace('#', '');
+    return [
+      parseInt(clean.substring(0, 2), 16),
+      parseInt(clean.substring(2, 4), 16),
+      parseInt(clean.substring(4, 6), 16)
+    ];
+  }
+
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  function mixColor(a, b, t) {
+    const p = clamp01(t);
+    return [
+      Math.round(a[0] + (b[0] - a[0]) * p),
+      Math.round(a[1] + (b[1] - a[1]) * p),
+      Math.round(a[2] + (b[2] - a[2]) * p)
+    ];
+  }
+
+  function toRgba(rgb, alpha) {
+    return 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + clamp01(alpha) + ')';
+  }
+
+  function wrap(value, limit) {
+    return (value + limit) % limit;
+  }
+
+  function indexOf(x, y, cols, rows) {
+    return wrap(y, rows) * cols + wrap(x, cols);
+  }
+
+  function normalizeGlyphs(charsList) {
+    const glyphs = Array.from(charsList)
+      .filter(char => char.trim().length > 0 && !BLOCK_GLYPHS.has(char))
+      .join('');
+    return glyphs.length >= 3 ? glyphs : DEFAULT_LIFE_GLYPHS;
+  }
+
+  function stampPattern(cells, cols, rows, pattern, originX, originY) {
+    pattern.forEach(([dx, dy]) => {
+      const x = wrap(originX + dx, cols);
+      const y = wrap(originY + dy, rows);
+      cells[y * cols + x] = 1;
+    });
+  }
+
+  function makeGrid(cols, rows) {
+    const cells = new Uint8Array(cols * rows);
+    const next = new Uint8Array(cols * rows);
+    const seedCount = Math.floor((cols * rows) / 450) + 1;
+    for (let s = 0; s < seedCount; s++) {
+      const pat = SEEDS[Math.floor(Math.random() * SEEDS.length)];
+      const ox = Math.floor(Math.random() * (cols - 15)) + 1;
+      const oy = Math.floor(Math.random() * (rows - 15)) + 1;
+      stampPattern(cells, cols, rows, pat, ox, oy);
+    }
+    return { cells, next, cols, rows, generation: 0 };
+  }
+
+  function stepGrid(grid) {
+    const { cells, next, cols, rows } = grid;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        let neighbors = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            if (cells[indexOf(x + dx, y + dy, cols, rows)] > 0) {
+              neighbors++;
+            }
+          }
+        }
+        const selfIdx = y * cols + x;
+        const state = cells[selfIdx];
+        if (state > 0) {
+          if (neighbors === 2 || neighbors === 3) {
+            next[selfIdx] = Math.min(255, state + 1);
+          } else {
+            next[selfIdx] = 0;
+          }
+        } else {
+          if (neighbors === 3) {
+            next[selfIdx] = 1;
+          } else {
+            next[selfIdx] = 0;
+          }
+        }
+      }
+    }
+    grid.cells.set(next);
+    grid.generation++;
+  }
+
+  function topologyGlyph(cells, x, y, grid) {
+    const { cols, rows } = grid;
+    const n = cells[indexOf(x, y - 1, cols, rows)] > 0;
+    const s = cells[indexOf(x, y + 1, cols, rows)] > 0;
+    const w = cells[indexOf(x - 1, y, cols, rows)] > 0;
+    const e = cells[indexOf(x + 1, y, cols, rows)] > 0;
+    let count = 0;
+    if (n) count++;
+    if (s) count++;
+    if (w) count++;
+    if (e) count++;
+    if (count === 4) return '+';
+    if (count === 3) {
+      if (!n) return 'T';
+      if (!s) return '┴';
+      if (!w) return '├';
+      return '┤';
+    }
+    if (n && s) return '|';
+    if (w && e) return '-';
+    if ((n && e) || (s && w)) return '/';
+    if ((n && w) || (s && e)) return '\\\\';
+    if (count === 1) return 'o';
+    return '.';
+  }
+
+  function getLifeColor(age, rowRatio, colorMode, solid, gradStart, gradEnd) {
+    const young = Math.max(0, 1 - (age - 1) * 0.15);
+    let baseColor = solid;
+    if (colorMode === 1) {
+      baseColor = mixColor(gradStart, gradEnd, rowRatio);
+    } else if (colorMode === 2) {
+      baseColor = rowRatio < 0.5
+        ? mixColor(gradStart, solid, rowRatio * 2)
+        : mixColor(solid, gradEnd, (rowRatio - 0.5) * 2);
+    } else if (colorMode === 3) {
+      baseColor = mixColor([32, 220, 96], solid, 0.45 + rowRatio * 0.55);
+    }
+    return mixColor(baseColor, [236, 72, 153], young * 0.72);
+  }
+
+  const chars = ${JSON.stringify(chars)};
+  const charWidth = ${charWidth};
+  const charHeight = ${charHeight};
+  const speed = ${speed};
+  const brightness = ${brightness};
+  const colorMode = ${colorMode};
+  const colorSolid = hexToRgb(${JSON.stringify(colorSolid)});
+  const colorGradStart = hexToRgb(${JSON.stringify(colorGradStart)});
+  const colorGradEnd = hexToRgb(${JSON.stringify(colorGradEnd)});
+  const colorBg = hexToRgb(${JSON.stringify(colorBg)});
+
+  let grid = null;
+  let stepAccumulator = 0;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const cols = Math.max(1, Math.ceil(canvas.width / charWidth));
+    const rows = Math.max(1, Math.ceil(canvas.height / charHeight));
+    grid = makeGrid(cols, rows);
+    stepAccumulator = 0;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  let previousTime = 0;
+
+  function render(now) {
+    if (previousTime === 0) previousTime = now;
+    const dt = Math.min(0.05, (now - previousTime) / 1000);
+    previousTime = now;
+
+    stepAccumulator += dt * speed * 8;
+    let steps = 0;
+    while (stepAccumulator >= 1 && steps < 4) {
+      stepGrid(grid);
+      stepAccumulator -= 1;
+      steps++;
+    }
+    if (steps === 4) stepAccumulator = 0;
+
+    const glyphs = normalizeGlyphs(chars);
+
+    ctx.fillStyle = 'rgb(' + colorBg[0] + ',' + colorBg[1] + ',' + colorBg[2] + ')';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.font = 'bold ' + Math.max(6, charHeight - 2) + 'px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let y = 0; y < grid.rows; y++) {
+      const rowRatio = grid.rows <= 1 ? 0 : y / (grid.rows - 1);
+      for (let x = 0; x < grid.cols; x++) {
+        const age = grid.cells[y * grid.cols + x];
+        if (age === 0) continue;
+
+        const intensity = clamp01((0.45 + age * 0.07) * brightness);
+        const rampIndex = Math.min(
+          glyphs.length - 1,
+          Math.floor(intensity * (glyphs.length - 1)),
+        );
+        const glyph = age < 3
+          ? glyphs[Math.max(0, Math.min(glyphs.length - 1, rampIndex))]
+          : topologyGlyph(grid.cells, x, y, grid);
+
+        const rgbColor = getLifeColor(age, rowRatio, colorMode, colorSolid, colorGradStart, colorGradEnd);
+        const finalColor = age <= 2 ? mixColor(rgbColor, [255, 255, 255], 0.32) : rgbColor;
+
+        ctx.fillStyle = toRgba(finalColor, 0.42 + intensity * 0.58);
+        ctx.fillText(glyph, x * charWidth + charWidth / 2, y * charHeight + charHeight / 2);
+      }
+    }
+
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+})();
+`
+
+          return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ASCII Cellular Automata Export</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: ${colorBg};
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    ${crt ? `
+    .crt-overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0px, rgba(0,0,0,0.28) 1px, transparent 1px, transparent 3px);
+      mix-blend-mode: multiply;
+      z-index: 999;
+    }
+    ` : ''}
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  ${crt ? '<div class="crt-overlay"></div>' : ''}
+  <script>
+    ${setupJsCode}
+  </script>
+</body>
+</html>`
+        },
+      };
+    }
+    return () => {
+      if (exportRef) {
+        exportRef.current = null;
+      }
+    };
+  }, [crt, exportRef]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

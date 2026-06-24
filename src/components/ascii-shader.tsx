@@ -38,6 +38,7 @@ export function AsciiShader() {
   const { theme: uiTheme, toggleTheme } = useTheme();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const exportRef = useRef<{ getHtml?: () => string } | null>(null);
   const activeTheme = getTheme(config.themeId);
 
   const update = useCallback((patch: Partial<ShaderConfig>) => {
@@ -66,9 +67,19 @@ export function AsciiShader() {
     link.click();
   }, []);
 
-  const copyHtml = useCallback(() => {
-    // TODO: emit a themed <pre> embed from the current frame.
-    void navigator.clipboard?.writeText('');
+  const exportHtml = useCallback(async () => {
+    if (exportRef.current?.getHtml) {
+      const html = await exportRef.current.getHtml();
+      if (html) {
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = 'ascii-shader.html';
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    }
   }, []);
 
   const modeDef = getModeDef(config.mode);
@@ -95,6 +106,7 @@ export function AsciiShader() {
           isParentScreensaver={screensaver}
           onExitParentScreensaver={() => setScreensaver(false)}
           externalCanvasRef={canvasRef}
+          exportRef={exportRef}
         />
       );
     }
@@ -115,6 +127,7 @@ export function AsciiShader() {
           isParentScreensaver={screensaver}
           onExitParentScreensaver={() => setScreensaver(false)}
           externalCanvasRef={canvasRef}
+          exportRef={exportRef}
         />
       );
     }
@@ -135,6 +148,7 @@ export function AsciiShader() {
           isParentScreensaver={screensaver}
           onExitParentScreensaver={() => setScreensaver(false)}
           externalCanvasRef={canvasRef}
+          exportRef={exportRef}
         />
       );
     }
@@ -155,11 +169,12 @@ export function AsciiShader() {
           isParentScreensaver={screensaver}
           onExitParentScreensaver={() => setScreensaver(false)}
           externalCanvasRef={canvasRef}
+          exportRef={exportRef}
         />
       );
     }
     return (
-      <ShaderCanvas config={config} theme={activeTheme} canvasRef={canvasRef} />
+      <ShaderCanvas config={config} theme={activeTheme} canvasRef={canvasRef} exportRef={exportRef} />
     );
   }
 
@@ -208,14 +223,14 @@ export function AsciiShader() {
         </section>
 
         {/* Constrained right sidebar of controls. */}
-        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:h-full lg:overflow-y-auto">
           <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground">
             {activeLabel}
           </p>
           <ControlPanel
             config={config}
             onChange={update}
-            onCopyHtml={copyHtml}
+            onExportHtml={exportHtml}
             onDownloadPng={downloadPng}
           />
         </aside>
