@@ -14,6 +14,7 @@ export const DEFAULT_RAMP = ASCII_RAMP
 
 /** Quick-pick glyph ramps surfaced as buttons in the control panel. */
 export const GLYPH_RAMPS: GlyphRamp[] = [
+  { id: 'ascii', label: 'ASCII', chars: ASCII_RAMP },
   { id: 'standard', label: 'Standard', chars: STANDARD_RAMP },
   { id: 'detailed', label: 'Detailed', chars: DETAILED_RAMP },
   { id: 'blocks', label: 'Blocks', chars: BLOCKS_RAMP },

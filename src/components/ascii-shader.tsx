@@ -42,6 +42,7 @@ const INITIAL_CONFIG: ShaderConfig = {
   imageSrc: null,
   imageEnabled: false,
   imageUseColors: false,
+  showRealColors: false,
 };
 
 /** Container: owns live config, screensaver state, and renderer routing. */
@@ -121,6 +122,7 @@ export function AsciiShader() {
           onExitParentScreensaver={() => setScreensaver(false)}
           externalCanvasRef={canvasRef}
           exportRef={exportRef}
+          showRealColors={config.showRealColors}
         />
       );
     }

@@ -27,6 +27,7 @@ export type ShaderMode =
   | 6 // turing      (own WebGL2 context — turing-shader.tsx)
   | 7 // matrix rain (own 2D canvas renderer — matrix-rain-shader.tsx)
   | 8 // automata    (own 2D canvas renderer — cellular-automata-shader.tsx)
+  | 9 // pewdiepie   (domain-warped wavy diagonal stripes)
 
 /** A selectable color theme. */
 export interface ColorTheme {
@@ -81,6 +82,7 @@ export interface ShaderConfig {
   imageEnabled: boolean
   /** Source Image: passthrough the image's own colors instead of theme tint. */
   imageUseColors: boolean
+  showRealColors: boolean
 }
 
 /**
@@ -104,4 +106,5 @@ export interface ShaderProps {
   onExitParentScreensaver?: () => void
   externalCanvasRef?: RefObject<HTMLCanvasElement | null> // for exports
   exportRef?: RefObject<{ getHtml?: () => Promise<string> | string } | null>
+  showRealColors?: boolean
 }

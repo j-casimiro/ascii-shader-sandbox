@@ -38,6 +38,7 @@ const FRAGMENT_SHADER = `
   uniform sampler2D u_font_atlas;
   uniform float     u_char_count;
   uniform int       u_is_data_pass;
+  uniform int       u_show_real_colors;
 
   varying vec2 vUv;
 
@@ -100,7 +101,13 @@ const FRAGMENT_SHADER = `
     // 1. Grid setup for ASCII lookup
     vec2 gridCoords = floor(gl_FragCoord.xy / u_grid_size);
     vec2 localCoords = fract(gl_FragCoord.xy / u_grid_size);
-    vec2 uv = (gridCoords + 0.5) * u_grid_size / u_resolution;
+    
+    vec2 uv;
+    if (u_show_real_colors == 1) {
+      uv = gl_FragCoord.xy / u_resolution;
+    } else {
+      uv = (gridCoords + 0.5) * u_grid_size / u_resolution;
+    }
 
     // Aspect-corrected coordinates centered at (0,0)
     float aspect = u_resolution.x / u_resolution.y;
@@ -138,7 +145,12 @@ const FRAGMENT_SHADER = `
     float h2 = dot(angMom, angMom);
 
     // Dither start position slightly to break up banding
-    float dither = hash(gridCoords);
+    float dither;
+    if (u_show_real_colors == 1) {
+      dither = hash(gl_FragCoord.xy);
+    } else {
+      dither = hash(gridCoords);
+    }
     pos += vel * dither * 0.18;
 
     vec3 dir = vel;
@@ -186,6 +198,10 @@ const FRAGMENT_SHADER = `
           // Turbulent gas
           float swirl = fbm(pr * 1.4 + vec2(0.0, d_xz * 0.8));
           float fine = fbm(pr * 4.0);
+          if (u_show_real_colors == 1) {
+            // Add a very high frequency noise octave for sharp dust/gas filaments
+            fine += 0.28 * fbm(pr * 12.0 - vec2(u_time * 0.9, 0.0));
+          }
 
           // Smooth radial brightness falloff (hot inner, dim outer)
           float radial = exp(-0.42 * (d_xz - r_in));
@@ -237,6 +253,15 @@ const FRAGMENT_SHADER = `
     float charIdx = floor(val * u_char_count);
     charIdx = clamp(charIdx, 0.0, u_char_count - 1.0);
 
+    if (u_show_real_colors == 1) {
+      vec3 finalColor = mix(u_color_bg, color, alpha);
+      if (hitHorizon) {
+        finalColor = mix(vec3(0.0), color, alpha);
+      }
+      gl_FragColor = vec4(finalColor, 1.0);
+      return;
+    }
+
     if (u_is_data_pass == 1) {
       gl_FragColor = vec4(charIdx / 255.0, color.r, color.g, color.b);
       return;
@@ -284,6 +309,7 @@ export function BlackholeShader({
   colorBg = '#000000',
   externalCanvasRef,
   exportRef,
+  showRealColors = false,
 }: ShaderProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const glRef = useRef<WebGLRenderingContext | null>(null);
@@ -304,6 +330,7 @@ export function BlackholeShader({
   const colorGradStartRef = useRef(hexToRgb(colorGradStart));
   const colorGradEndRef = useRef(hexToRgb(colorGradEnd));
   const colorBgRef = useRef(hexToRgb(colorBg));
+  const showRealColorsRef = useRef(showRealColors);
 
   useEffect(() => {
     charsRef.current = chars;
@@ -316,6 +343,7 @@ export function BlackholeShader({
     colorGradStartRef.current = hexToRgb(colorGradStart);
     colorGradEndRef.current = hexToRgb(colorGradEnd);
     colorBgRef.current = hexToRgb(colorBg);
+    showRealColorsRef.current = showRealColors;
   }, [
     chars,
     charWidth,
@@ -327,6 +355,7 @@ export function BlackholeShader({
     colorGradStart,
     colorGradEnd,
     colorBg,
+    showRealColors,
   ]);
 
   // Pre-bake the font atlas: a horizontal strip of every ramp glyph, drawn in
@@ -429,7 +458,7 @@ export function BlackholeShader({
   [
     'u_resolution', 'u_time', 'u_grid_size', 'u_speed', 'u_brightness',
     'u_color_mode', 'u_color_solid', 'u_color_grad_start', 'u_color_grad_end',
-    'u_color_bg', 'u_font_atlas', 'u_char_count', 'u_is_data_pass'
+    'u_color_bg', 'u_font_atlas', 'u_char_count', 'u_is_data_pass', 'u_show_real_colors'
   ].forEach(name => {
     uniforms[name] = gl.getUniformLocation(program, name);
   });
@@ -506,6 +535,7 @@ export function BlackholeShader({
     gl.uniform3fv(uniforms.u_color_grad_end, colorGradEnd);
     gl.uniform3fv(uniforms.u_color_bg, colorBg);
     gl.uniform1i(uniforms.u_is_data_pass, 0);
+    gl.uniform1i(uniforms.u_show_real_colors, ${showRealColors ? 1 : 0});
 
     if (fontAtlasTexture) {
       gl.activeTexture(gl.TEXTURE0);
@@ -567,7 +597,7 @@ export function BlackholeShader({
         exportRef.current = null;
       }
     };
-  }, [brightness, charHeight, charWidth, chars, colorBg, colorGradEnd, colorGradStart, colorMode, colorSolid, crt, exportRef, speed]);
+  }, [brightness, charHeight, charWidth, chars, colorBg, colorGradEnd, colorGradStart, colorMode, colorSolid, crt, exportRef, speed, showRealColors]);
 
   // WebGL1 initialization + render loop (set up once).
   useEffect(() => {
@@ -698,6 +728,10 @@ export function BlackholeShader({
       gl.uniform1i(
         gl.getUniformLocation(program, 'u_is_data_pass'),
         0,
+      );
+      gl.uniform1i(
+        gl.getUniformLocation(program, 'u_show_real_colors'),
+        showRealColorsRef.current ? 1 : 0,
       );
 
       // Bind font atlas

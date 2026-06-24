@@ -78,6 +78,15 @@ export const COLOR_THEMES: ColorTheme[] = [
     gradEnd: '#0d0d1a',
     mode: 2,
   },
+  {
+    id: 'pewdiepie',
+    name: 'PewDiePie',
+    bg: '#000000',
+    accent: '#ff0033',
+    gradStart: '#660011',
+    gradEnd: '#ff4455',
+    mode: 0,
+  },
 ]
 
 /** Default theme: Amber CRT. */

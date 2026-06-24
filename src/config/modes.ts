@@ -137,6 +137,20 @@ export const SHADER_MODES: ShaderModeDef[] = [
       charHeight: 12,
     },
   },
+  {
+    mode: 9,
+    name: 'PewDiePie',
+    description: 'Domain-warped wavy diagonal stripes.',
+    usesScale: true,
+    separateComponent: false,
+    defaults: {
+      chars: BLOCKS_RAMP,
+      themeId: 'pewdiepie',
+      speed: 0.6,
+      charWidth: 7,
+      charHeight: 12,
+    },
+  },
 ];
 
 export function getModeDef(mode: ShaderMode): ShaderModeDef {

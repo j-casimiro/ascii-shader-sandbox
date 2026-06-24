@@ -167,6 +167,21 @@ const FRAGMENT_SHADER = `
       // sampled pixel, so darker regions map to sparser glyphs.
       vec3 rgb = sampleImage(uv);
       return dot(rgb, vec3(0.299, 0.587, 0.114));
+    } else if (u_mode == 9) {
+      // Mode 9 — PewDiePie: traveling sine-wave diagonal stripes.
+      // Stripes run along (x − y); the wave travels along the perpendicular
+      // axis (x + y). Amplitude × frequency > 1 so stripes fold slightly at
+      // wave troughs, producing the tight-convergence bands in the reference.
+      vec2 p = uv;
+      p.x *= u_resolution.x / u_resolution.y;
+      float t = u_time * 0.45;
+      float along  = p.x + p.y;  // wave travel axis
+      float across = p.x - p.y;  // stripe axis
+      // Primary wave (Ak = 1.12 → slight fold) + softer second harmonic
+      float wave = sin(along * 3.2 - t)        * 0.35
+                 + sin(along * 1.6 + t * 0.55) * 0.15;
+      float stripe = sin((across + wave) * u_scale * 4.5);
+      return smoothstep(-0.25, 0.25, stripe);
     }
     return 0.0;
   }

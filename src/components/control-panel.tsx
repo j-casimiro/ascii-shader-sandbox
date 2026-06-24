@@ -70,6 +70,18 @@ export function ControlPanel({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">{modeDef.description}</p>
+        {config.mode === 5 && (
+          <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
+            <Label htmlFor="show-real-colors" className="text-xs">
+              Real Graphics (No ASCII)
+            </Label>
+            <Switch
+              id="show-real-colors"
+              checked={config.showRealColors}
+              onCheckedChange={(c) => onChange({ showRealColors: c })}
+            />
+          </div>
+        )}
       </ControlSection>
 
       {/* ── Source Image (dedicated input source, not an algorithm) ───── */}
