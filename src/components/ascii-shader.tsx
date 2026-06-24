@@ -6,6 +6,8 @@ import { ControlPanel } from '@/components/control-panel';
 import { ShaderCanvas } from '@/components/shader-canvas';
 import { BlackholeShader } from '@/components/blackhole-shader';
 import { TuringShader } from '@/components/turing-shader';
+import { MatrixRainShader } from '@/components/matrix-rain-shader';
+import { CellularAutomataShader } from '@/components/cellular-automata-shader';
 
 import { useTheme } from '@/hooks/use-theme';
 import { getTheme, DEFAULT_THEME_ID } from '@/config/themes';
@@ -24,6 +26,7 @@ const INITIAL_CONFIG: ShaderConfig = {
   crt: DEFAULT_CONFIG.crt,
   themeId: DEFAULT_THEME_ID,
   imageSrc: null,
+  imageEnabled: false,
   imageUseColors: false,
 };
 
@@ -68,9 +71,13 @@ export function AsciiShader() {
   }, []);
 
   const modeDef = getModeDef(config.mode);
+  // The source image overrides the selected algorithm when enabled, including
+  // the separate-component effects (Blackhole / Turing / Matrix Rain / Automata).
+  const imageActive = config.imageEnabled && !!config.imageSrc;
+  const activeLabel = imageActive ? 'Source Image' : modeDef.name;
 
   function renderActiveShader() {
-    if (config.mode === 5) {
+    if (!imageActive && config.mode === 5) {
       return (
         <BlackholeShader
           chars={config.chars}
@@ -90,9 +97,49 @@ export function AsciiShader() {
         />
       );
     }
-    if (config.mode === 6) {
+    if (!imageActive && config.mode === 6) {
       return (
         <TuringShader
+          chars={config.chars}
+          charWidth={config.charWidth}
+          charHeight={config.charHeight}
+          speed={config.speed}
+          brightness={config.brightness}
+          crt={config.crt}
+          colorMode={activeTheme.mode}
+          colorSolid={activeTheme.accent}
+          colorGradStart={activeTheme.gradStart}
+          colorGradEnd={activeTheme.gradEnd}
+          colorBg={activeTheme.bg}
+          isParentScreensaver={screensaver}
+          onExitParentScreensaver={() => setScreensaver(false)}
+          externalCanvasRef={canvasRef}
+        />
+      );
+    }
+    if (!imageActive && config.mode === 7) {
+      return (
+        <MatrixRainShader
+          chars={config.chars}
+          charWidth={config.charWidth}
+          charHeight={config.charHeight}
+          speed={config.speed}
+          brightness={config.brightness}
+          crt={config.crt}
+          colorMode={activeTheme.mode}
+          colorSolid={activeTheme.accent}
+          colorGradStart={activeTheme.gradStart}
+          colorGradEnd={activeTheme.gradEnd}
+          colorBg={activeTheme.bg}
+          isParentScreensaver={screensaver}
+          onExitParentScreensaver={() => setScreensaver(false)}
+          externalCanvasRef={canvasRef}
+        />
+      );
+    }
+    if (!imageActive && config.mode === 8) {
+      return (
+        <CellularAutomataShader
           chars={config.chars}
           charWidth={config.charWidth}
           charHeight={config.charHeight}
@@ -123,7 +170,7 @@ export function AsciiShader() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+    <div className="min-h-dvh lg:h-dvh lg:overflow-hidden bg-background text-foreground flex flex-col font-sans">
       <header className="flex items-center justify-between border-b border-border px-4 md:px-8 lg:px-12 py-3">
         <div className="flex items-baseline gap-3">
           <h1 className="text-[18px] font-semibold tracking-tight">
@@ -153,16 +200,16 @@ export function AsciiShader() {
         </div>
       </header>
 
-      <main className="w-full max-w-none px-4 md:px-8 lg:px-12 py-6 flex-1 flex flex-col lg:flex-row gap-6">
+      <main className="w-full min-h-0 px-4 md:px-4 lg:px-4 py-4 flex-1 flex flex-col lg:flex-row gap-6 lg:overflow-hidden">
         {/* Full-bleed canvas — no extra card wrapper. */}
         <section className="flex-1 min-h-[50vh] lg:min-h-0 rounded-lg overflow-hidden border border-border">
           {renderActiveShader()}
         </section>
 
         {/* Constrained right sidebar of controls. */}
-        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto pr-1">
+        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
           <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            {modeDef.name}
+            {activeLabel}
           </p>
           <ControlPanel
             config={config}

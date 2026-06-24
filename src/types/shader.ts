@@ -1,10 +1,11 @@
 /**
  * Shared type contract for the ASCII Shader Sandbox.
  *
- * Every effect funnels into one back end: a fragment shader computes a single
- * scalar intensity `val ∈ [0,1]` once per character cell, which is quantized to
- * a glyph index, sampled from a pre-baked font atlas, and tinted by the active
- * color theme. These types describe the configuration that drives that pipeline.
+ * Most effects funnel into one back end: a fragment shader computes a single
+ * scalar intensity per character cell, which is quantized to a glyph index,
+ * sampled from a pre-baked font atlas, and tinted by the active color theme.
+ * Dedicated renderers use the same control contract where they need their own
+ * state or context.
  */
 import type { RefObject } from 'react'
 
@@ -15,7 +16,7 @@ export type ColorMode =
   | 2 // multivalue  — heat ramp across intensity bands
   | 3 // matrix      — classic falling-green look
 
-/** The 7 shader algorithms, switched on the `u_mode` integer uniform. */
+/** The available renderer modes. */
 export type ShaderMode =
   | 0 // procedural noise field
   | 1 // flow / domain-warped noise
@@ -24,6 +25,8 @@ export type ShaderMode =
   | 4 // additional procedural field
   | 5 // blackhole   (own WebGL1 context — blackhole-shader.tsx)
   | 6 // turing      (own WebGL2 context — turing-shader.tsx)
+  | 7 // matrix rain (own 2D canvas renderer — matrix-rain-shader.tsx)
+  | 8 // automata    (own 2D canvas renderer — cellular-automata-shader.tsx)
 
 /** A selectable color theme. */
 export interface ColorTheme {
@@ -68,14 +71,20 @@ export interface ShaderConfig {
   crt: boolean
   /** Active color theme id (resolves into COLOR_THEMES). */
   themeId: string
-  /** Mode 3: uploaded source image (object URL or data URL). */
+  /** Source Image: uploaded image (object URL or data URL). */
   imageSrc: string | null
-  /** Mode 3: passthrough the image's own colors instead of theme tint. */
+  /**
+   * Source Image: when true (and an image is loaded), the canvas renders the
+   * image instead of the selected algorithm. Decoupled from `mode` so the
+   * algorithm dropdown stays purely about procedural effects.
+   */
+  imageEnabled: boolean
+  /** Source Image: passthrough the image's own colors instead of theme tint. */
   imageUseColors: boolean
 }
 
 /**
- * Prop contract for the separate-component effects (modes 5 and 6). The parent
+ * Prop contract for the separate-component effects. The parent
  * container remains the single source of truth for screensaver state and feeds
  * resolved theme colors as hex strings.
  */
