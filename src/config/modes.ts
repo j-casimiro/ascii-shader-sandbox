@@ -163,7 +163,7 @@ export function getModeDefaults(mode: ShaderMode): ShaderModeDefaults {
 
 /** Default live configuration. */
 export const DEFAULT_CONFIG = {
-  mode: 0 as ShaderMode,
+  mode: 6 as ShaderMode,
   charWidth: 7,
   charHeight: 12,
   scale: 4.0,
