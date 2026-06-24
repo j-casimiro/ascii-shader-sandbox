@@ -73,11 +73,13 @@ const FRAGMENT_SHADER = `
       float factor = clamp((r_eff - 2.6) / 6.4, 0.0, 1.0);
       tempColor = mix(u_color_grad_start, u_color_grad_end, factor);
     } else {
-      // Volcanic/Default (classic Gargantua colors)
-      if (r_eff < 3.8) {
-        tempColor = mix(vec3(1.0, 0.96, 0.92), vec3(1.0, 0.75, 0.35), clamp((r_eff - 2.6) / 1.2, 0.0, 1.0));
+      // mode 2: 3-stop heat ramp; inner ring (r=2.6) is hottest → gradEnd,
+      // outer edge (r=9.0) is coolest → gradStart.
+      float t = 1.0 - clamp((r_eff - 2.6) / 6.4, 0.0, 1.0);
+      if (t < 0.5) {
+        tempColor = mix(u_color_grad_start, u_color_solid, t / 0.5);
       } else {
-        tempColor = mix(vec3(1.0, 0.75, 0.35), vec3(0.55, 0.1, 0.02), clamp((r_eff - 3.8) / 5.2, 0.0, 1.0));
+        tempColor = mix(u_color_solid, u_color_grad_end, (t - 0.5) / 0.5);
       }
     }
     return tempColor;

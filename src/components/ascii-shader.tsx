@@ -10,21 +10,22 @@ import { MatrixRainShader } from '@/components/matrix-rain-shader';
 import { CellularAutomataShader } from '@/components/cellular-automata-shader';
 
 import { useTheme } from '@/hooks/use-theme';
-import { getTheme, DEFAULT_THEME_ID } from '@/config/themes';
-import { DEFAULT_RAMP } from '@/config/ramps';
-import { DEFAULT_CONFIG, getModeDef } from '@/config/modes';
+import { getTheme } from '@/config/themes';
+import { DEFAULT_CONFIG, getModeDef, getModeDefaults } from '@/config/modes';
 import type { ShaderConfig } from '@/types/shader';
+
+const INITIAL_MODE_DEFAULTS = getModeDefaults(DEFAULT_CONFIG.mode);
 
 const INITIAL_CONFIG: ShaderConfig = {
   mode: DEFAULT_CONFIG.mode,
-  chars: DEFAULT_RAMP,
+  chars: INITIAL_MODE_DEFAULTS.chars,
   charWidth: DEFAULT_CONFIG.charWidth,
   charHeight: DEFAULT_CONFIG.charHeight,
   scale: DEFAULT_CONFIG.scale,
-  speed: DEFAULT_CONFIG.speed,
+  speed: INITIAL_MODE_DEFAULTS.speed,
   brightness: DEFAULT_CONFIG.brightness,
   crt: DEFAULT_CONFIG.crt,
-  themeId: DEFAULT_THEME_ID,
+  themeId: INITIAL_MODE_DEFAULTS.themeId,
   imageSrc: null,
   imageEnabled: false,
   imageUseColors: false,

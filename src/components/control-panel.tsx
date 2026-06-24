@@ -17,7 +17,7 @@ import { SliderControl } from '@/components/controls/slider-control';
 
 import { COLOR_THEMES } from '@/config/themes';
 import { GLYPH_RAMPS } from '@/config/ramps';
-import { SHADER_MODES, getModeDef } from '@/config/modes';
+import { SHADER_MODES, getModeDef, getModeDefaults } from '@/config/modes';
 import type { ShaderConfig, ShaderMode } from '@/types/shader';
 
 interface ControlPanelProps {
@@ -36,6 +36,12 @@ export function ControlPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modeDef = getModeDef(config.mode);
 
+  function handleModeChange(value: string) {
+    const mode = Number(value) as ShaderMode;
+    const defaults = getModeDefaults(mode);
+    onChange({ mode, ...defaults });
+  }
+
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -50,7 +56,7 @@ export function ControlPanel({
       <ControlSection title="Shader Algorithm">
         <Select
           value={String(config.mode)}
-          onValueChange={(v) => onChange({ mode: Number(v) as ShaderMode })}
+          onValueChange={handleModeChange}
         >
           <SelectTrigger>
             <SelectValue />
