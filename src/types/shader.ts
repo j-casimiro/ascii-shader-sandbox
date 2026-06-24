@@ -28,6 +28,7 @@ export type ShaderMode =
   | 7 // matrix rain (own 2D canvas renderer — matrix-rain-shader.tsx)
   | 8 // automata    (own 2D canvas renderer — cellular-automata-shader.tsx)
   | 9 // pewdiepie   (domain-warped wavy diagonal stripes)
+  | 10 // truchet    (randomly oriented quarter-circle arc tiles)
 
 /** A selectable color theme. */
 export interface ColorTheme {

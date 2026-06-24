@@ -151,6 +151,20 @@ export const SHADER_MODES: ShaderModeDef[] = [
       charHeight: 12,
     },
   },
+  {
+    mode: 10,
+    name: 'Truchet',
+    description: 'Self-rewiring arc-tile maze.',
+    usesScale: true,
+    separateComponent: false,
+    defaults: {
+      chars: BLOCKS_RAMP,
+      themeId: 'ocean-currents',
+      speed: 0.6,
+      charWidth: 6,
+      charHeight: 9,
+    },
+  },
 ];
 
 export function getModeDef(mode: ShaderMode): ShaderModeDef {

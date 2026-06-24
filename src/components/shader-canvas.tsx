@@ -182,6 +182,43 @@ const FRAGMENT_SHADER = `
                  + sin(along * 1.6 + t * 0.55) * 0.15;
       float stripe = sin((across + wave) * u_scale * 4.5);
       return smoothstep(-0.25, 0.25, stripe);
+    } else if (u_mode == 10) {
+      // Mode 10 — Truchet: quarter-circle arcs in randomly oriented cells weave
+      // an endless maze/circuit. Each cell slowly rewires on its own cycle
+      // (crossfading through a momentary full ring), while a traveling shimmer
+      // runs along the weave like data on wires. u_scale sets tile density.
+      vec2 p = uv;
+      p.x *= u_resolution.x / u_resolution.y;   // aspect-correct square tiles
+      p *= u_scale;
+      vec2 cell = floor(p);
+      vec2 f = fract(p);
+
+      // Distance to each of the two arc pairs = the two tile orientations.
+      // Arcs are radius-0.5 quarter circles centered on opposite corners, so
+      // they always pass through edge midpoints and join across tile borders.
+      float dA = min(abs(length(f - vec2(0.0, 0.0)) - 0.5),
+                     abs(length(f - vec2(1.0, 1.0)) - 0.5));
+      float dB = min(abs(length(f - vec2(1.0, 0.0)) - 0.5),
+                     abs(length(f - vec2(0.0, 1.0)) - 0.5));
+
+      // Per-cell orientation. Each cell rewires at its OWN random rate and
+      // phase (not a shared frequency), so flips scatter unpredictably across
+      // the grid instead of sweeping through as one linear wave.
+      vec2 rnd = hash2(cell);
+      float freq   = 0.12 + rnd.x * rnd.x * 0.85;   // squared → many slow, few fast
+      float orient = sin(u_time * freq + rnd.y * 6.2831);
+      float blend  = smoothstep(-0.12, 0.12, orient);
+
+      float lineA = smoothstep(0.11, 0.0, dA);
+      float lineB = smoothstep(0.11, 0.0, dB);
+      float line  = mix(lineA, lineB, blend);
+
+      // Traveling shimmer along the weave, with a per-cell random phase and
+      // speed so the flow doesn't read as one uniform marching gradient.
+      float pulse = 0.6 + 0.4 * sin((f.x + f.y) * 3.1416
+                     + rnd.x * 6.2831 - u_time * (1.2 + rnd.y * 1.6));
+
+      return line * pulse;
     }
     return 0.0;
   }
