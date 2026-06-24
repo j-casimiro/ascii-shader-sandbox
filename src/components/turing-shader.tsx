@@ -82,11 +82,11 @@ const DISPLAY_SHADER = `#version 300 es
     } else if (u_color_mode == 1 || u_color_mode == 3) {
       return mix(u_color_grad_start, u_color_grad_end, clamp(v, 0.0, 1.0));
     }
-    // Volcanic / multivalue
+    // mode 2: 3-stop intensity heat ramp (gradStart → solid → gradEnd)
     if (v < 0.5) {
-      return mix(vec3(1.0, 0.96, 0.92), vec3(1.0, 0.6, 0.15), clamp(v / 0.5, 0.0, 1.0));
+      return mix(u_color_grad_start, u_color_solid, clamp(v / 0.5, 0.0, 1.0));
     }
-    return mix(vec3(1.0, 0.6, 0.15), vec3(0.5, 0.06, 0.02), clamp((v - 0.5) / 0.5, 0.0, 1.0));
+    return mix(u_color_solid, u_color_grad_end, clamp((v - 0.5) / 0.5, 0.0, 1.0));
   }
 
   void main() {
