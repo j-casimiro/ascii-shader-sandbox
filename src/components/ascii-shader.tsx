@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Maximize2, Moon, Sun } from 'lucide-react';
+import { Maximize2, Moon, Sun, SlidersHorizontal, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { ControlPanel } from '@/components/control-panel';
@@ -35,6 +35,7 @@ const INITIAL_CONFIG: ShaderConfig = {
 export function AsciiShader() {
   const [config, setConfig] = useState<ShaderConfig>(INITIAL_CONFIG);
   const [screensaver, setScreensaver] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { theme: uiTheme, toggleTheme } = useTheme();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -186,8 +187,8 @@ export function AsciiShader() {
   }
 
   return (
-    <div className="min-h-dvh lg:h-dvh lg:overflow-hidden bg-background text-foreground flex flex-col font-sans">
-      <header className="flex items-center justify-between border-b border-border px-4 md:px-8 lg:px-12 py-3">
+    <div className="h-dvh overflow-hidden bg-background text-foreground flex flex-col font-sans">
+      <header className="flex items-center justify-between border-b border-border px-4 md:px-8 lg:px-12 py-3 shrink-0">
         <div className="flex items-baseline gap-3">
           <h1 className="text-[18px] font-semibold tracking-tight">
             ASCII Shader Sandbox
@@ -213,26 +214,64 @@ export function AsciiShader() {
             <Maximize2 />
             Screensaver
           </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="lg:hidden"
+            onClick={() => setSidebarOpen((open) => !open)}
+            aria-label="Toggle settings sidebar"
+          >
+            <SlidersHorizontal />
+          </Button>
         </div>
       </header>
 
-      <main className="w-full min-h-0 px-4 md:px-4 lg:px-4 py-4 flex-1 flex flex-col lg:flex-row gap-6 lg:overflow-hidden">
+      <main className="w-full min-h-0 p-0 lg:p-4 flex-1 flex flex-col lg:flex-row lg:gap-6 overflow-hidden relative">
         {/* Full-bleed canvas — no extra card wrapper. */}
-        <section className="flex-1 min-h-[50vh] lg:min-h-0 rounded-lg overflow-hidden border border-border">
+        <section className="flex-1 min-h-0 lg:rounded-lg overflow-hidden border-0 lg:border border-border">
           {renderActiveShader()}
         </section>
 
-        {/* Constrained right sidebar of controls. */}
-        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:h-full lg:overflow-y-auto">
-          <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            {activeLabel}
-          </p>
-          <ControlPanel
-            config={config}
-            onChange={update}
-            onExportHtml={exportHtml}
-            onDownloadPng={downloadPng}
+        {/* Sidebar Backdrop for Mobile */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/60 z-30 lg:hidden transition-opacity"
+            onClick={() => setSidebarOpen(false)}
           />
+        )}
+
+        {/* Constrained right sidebar of controls. */}
+        <aside
+          className={`sidebar-scroll fixed inset-y-0 right-0 z-40 w-[85vw] sm:w-[380px] bg-sidebar border-l border-border flex flex-col transform transition-transform duration-300 ease-in-out lg:static lg:w-85 lg:shrink-0 lg:h-full lg:flex lg:flex-col lg:bg-transparent lg:border-l-0 lg:translate-x-0 ${
+            sidebarOpen ? 'translate-x-0' : 'translate-x-full'
+          }`}
+        >
+          {/* Mobile Sidebar Header */}
+          <div className="flex items-center justify-between p-4 border-b border-border lg:hidden shrink-0">
+            <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+              Shader Settings
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close settings"
+            >
+              <X />
+            </Button>
+          </div>
+
+          <div className="sidebar-scroll flex-1 overflow-y-auto p-4 lg:p-0">
+            <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground hidden lg:block">
+              {activeLabel}
+            </p>
+            <ControlPanel
+              config={config}
+              onChange={update}
+              onExportHtml={exportHtml}
+              onDownloadPng={downloadPng}
+            />
+          </div>
         </aside>
       </main>
     </div>

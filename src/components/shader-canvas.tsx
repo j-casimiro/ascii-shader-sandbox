@@ -461,11 +461,12 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
     )
 
     const resize = () => {
+      const dpr = window.devicePixelRatio || 1
       const w = Math.max(1, container.clientWidth)
       const h = Math.max(1, container.clientHeight)
-      canvas.width = w
-      canvas.height = h
-      gl.viewport(0, 0, w, h)
+      canvas.width = w * dpr
+      canvas.height = h * dpr
+      gl.viewport(0, 0, w * dpr, h * dpr)
     }
     resize()
     const resizeObserver = new ResizeObserver(resize)

@@ -632,8 +632,9 @@ export function BlackholeShader({
     const resizeObserver = new ResizeObserver(() => {
       const parent = canvas.parentElement;
       if (parent) {
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight || 500;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = parent.clientWidth * dpr;
+        canvas.height = (parent.clientHeight || 500) * dpr;
         gl.viewport(0, 0, canvas.width, canvas.height);
       }
     });
