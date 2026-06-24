@@ -13,7 +13,7 @@ export interface ShaderModeDef {
 
 /**
  * The selectable shader *algorithms*. Modes 0/2/4 share one WebGL1 context +
- * fragment shader (switched on `u_mode`); modes 5/6/7 own their rendering
+ * fragment shader (switched on `u_mode`); modes 5/6/7/8 own their rendering
  * contexts in separate components. Mode 3 (Source Image) is intentionally
  * absent: it is not an algorithm but an input source, toggled via its own panel
  * (`imageEnabled`), and rendered by the shared WebGL1 fragment shader's
@@ -59,6 +59,13 @@ export const SHADER_MODES: ShaderModeDef[] = [
     mode: 7,
     name: 'Matrix Rain',
     description: 'Falling per-column glyph streams.',
+    usesScale: false,
+    separateComponent: true,
+  },
+  {
+    mode: 8,
+    name: 'Cellular Automata',
+    description: 'Life-like cyclic feedback grid.',
     usesScale: false,
     separateComponent: true,
   },

@@ -26,6 +26,7 @@ export type ShaderMode =
   | 5 // blackhole   (own WebGL1 context — blackhole-shader.tsx)
   | 6 // turing      (own WebGL2 context — turing-shader.tsx)
   | 7 // matrix rain (own 2D canvas renderer — matrix-rain-shader.tsx)
+  | 8 // automata    (own 2D canvas renderer — cellular-automata-shader.tsx)
 
 /** A selectable color theme. */
 export interface ColorTheme {

@@ -7,6 +7,7 @@ import { ShaderCanvas } from '@/components/shader-canvas';
 import { BlackholeShader } from '@/components/blackhole-shader';
 import { TuringShader } from '@/components/turing-shader';
 import { MatrixRainShader } from '@/components/matrix-rain-shader';
+import { CellularAutomataShader } from '@/components/cellular-automata-shader';
 
 import { useTheme } from '@/hooks/use-theme';
 import { getTheme, DEFAULT_THEME_ID } from '@/config/themes';
@@ -71,7 +72,7 @@ export function AsciiShader() {
 
   const modeDef = getModeDef(config.mode);
   // The source image overrides the selected algorithm when enabled, including
-  // the separate-component effects (Blackhole / Turing / Matrix Rain).
+  // the separate-component effects (Blackhole / Turing / Matrix Rain / Automata).
   const imageActive = config.imageEnabled && !!config.imageSrc;
   const activeLabel = imageActive ? 'Source Image' : modeDef.name;
 
@@ -119,6 +120,26 @@ export function AsciiShader() {
     if (!imageActive && config.mode === 7) {
       return (
         <MatrixRainShader
+          chars={config.chars}
+          charWidth={config.charWidth}
+          charHeight={config.charHeight}
+          speed={config.speed}
+          brightness={config.brightness}
+          crt={config.crt}
+          colorMode={activeTheme.mode}
+          colorSolid={activeTheme.accent}
+          colorGradStart={activeTheme.gradStart}
+          colorGradEnd={activeTheme.gradEnd}
+          colorBg={activeTheme.bg}
+          isParentScreensaver={screensaver}
+          onExitParentScreensaver={() => setScreensaver(false)}
+          externalCanvasRef={canvasRef}
+        />
+      );
+    }
+    if (!imageActive && config.mode === 8) {
+      return (
+        <CellularAutomataShader
           chars={config.chars}
           charWidth={config.charWidth}
           charHeight={config.charHeight}
