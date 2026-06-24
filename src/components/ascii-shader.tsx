@@ -128,7 +128,7 @@ export function AsciiShader() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+    <div className="min-h-dvh lg:h-dvh lg:overflow-hidden bg-background text-foreground flex flex-col font-sans">
       <header className="flex items-center justify-between border-b border-border px-4 md:px-8 lg:px-12 py-3">
         <div className="flex items-baseline gap-3">
           <h1 className="text-[18px] font-semibold tracking-tight">
@@ -158,14 +158,14 @@ export function AsciiShader() {
         </div>
       </header>
 
-      <main className="w-full max-w-none px-4 md:px-8 lg:px-12 py-6 flex-1 flex flex-col lg:flex-row gap-6">
+      <main className="w-full min-h-0 px-4 md:px-4 lg:px-4 py-4 flex-1 flex flex-col lg:flex-row gap-6 lg:overflow-hidden">
         {/* Full-bleed canvas — no extra card wrapper. */}
         <section className="flex-1 min-h-[50vh] lg:min-h-0 rounded-lg overflow-hidden border border-border">
           {renderActiveShader()}
         </section>
 
         {/* Constrained right sidebar of controls. */}
-        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto pr-1">
+        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
           <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground">
             {activeLabel}
           </p>

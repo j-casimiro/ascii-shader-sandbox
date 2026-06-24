@@ -175,10 +175,10 @@ export function ControlPanel({
               key={ramp.id}
               variant="outline"
               size="sm"
-              className="font-mono"
+              className="font-mono px-2"
               onClick={() => onChange({ chars: ramp.chars })}
             >
-              {ramp.chars.trim() || ramp.label}
+              {ramp.chars.length > 12 ? ramp.label : (ramp.chars.trim() || ramp.label)}
             </Button>
           ))}
         </div>
