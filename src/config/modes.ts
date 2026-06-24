@@ -26,16 +26,9 @@ export const SHADER_MODES: ShaderModeDef[] = [
     separateComponent: false,
   },
   {
-    mode: 1,
-    name: 'Flow',
-    description: 'Domain-warped flowing noise.',
-    usesScale: true,
-    separateComponent: false,
-  },
-  {
     mode: 2,
     name: 'Plasma',
-    description: 'Layered interference patterns.',
+    description: 'Layered sine interference.',
     usesScale: false,
     separateComponent: false,
   },

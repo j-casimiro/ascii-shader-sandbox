@@ -69,6 +69,29 @@ const FRAGMENT_SHADER = `
     return v / 0.96875;                        // normalize ~[0,1]
   }
 
+  // ── Hand-written Worley (cellular) noise ──────────────────────────
+  vec2 hash2(vec2 p) {
+    return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
+                          dot(p, vec2(269.5, 183.3)))) * 43758.5453);
+  }
+
+  // F1 distance to the nearest animated feature point. Returns ~[0,1].
+  float worley(vec2 p) {
+    vec2 ip = floor(p);
+    vec2 fp = fract(p);
+    float minDist = 1.0;
+    for (int j = -1; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        vec2 g = vec2(float(i), float(j));
+        vec2 o = hash2(ip + g);
+        o = 0.5 + 0.5 * sin(u_time * 0.6 + 6.2831 * o);  // drift the points
+        vec2 r = g + o - fp;
+        minDist = min(minDist, dot(r, r));
+      }
+    }
+    return sqrt(minDist);
+  }
+
   // ── Effect intensity, branched on u_mode ──────────────────────────
   float computeIntensity(vec2 uv) {
     if (u_mode == 0) {
@@ -78,9 +101,40 @@ const FRAGMENT_SHADER = `
       p *= u_scale;
       p += vec2(u_time * 0.15, u_time * -0.10);
       return fbm(p);
+    } else if (u_mode == 2) {
+      // Mode 2 — Plasma: layered sine interference. Smooth bands that read
+      // clearly even at the coarse one-sample-per-cell grid. No u_scale.
+      vec2 p = uv;
+      p.x *= u_resolution.x / u_resolution.y;  // aspect-correct radial term
+      float t = u_time;
+
+      // Domain warp: displace coords by smooth low-freq value noise so the
+      // sine grid never tiles into an obvious repeat. Single-octave (not fBm)
+      // keeps the warp soft — no high-frequency grain. The warp itself drifts.
+      vec2 warp = vec2(
+        valueNoise(p * 1.2 + vec2(0.0, t * 0.12)),
+        valueNoise(p * 1.2 + vec2(5.2, t * 0.10 + 1.7))
+      );
+      p += (warp - 0.5) * 1.5;
+
+      float v = sin(p.x * 9.0 + t);
+      v += sin(p.y * 9.0 + t * 1.1);
+      v += sin((p.x + p.y) * 8.0 + t * 0.8);
+      vec2 c = p + 0.5 * vec2(sin(t * 0.33), cos(t * 0.41));
+      v += sin(length(c) * 12.0 - t * 1.3);
+      // Smooth low-freq term adds gentle non-periodic large-scale variation.
+      v += 2.0 * (valueNoise(p * 0.8 + vec2(t * 0.07, -t * 0.05)) - 0.5);
+      return v * 0.1 + 0.5;                    // [-5,5] -> [0,1]
+    } else if (u_mode == 4) {
+      // Mode 4 — Field: animated Worley (cellular) noise. Organic pulsing
+      // cells, distinct from fBm grain (mode 0) and sine bands (mode 2).
+      vec2 p = uv;
+      p.x *= u_resolution.x / u_resolution.y;  // aspect-correct cells
+      p *= u_scale;
+      float d = worley(p);
+      return 1.0 - clamp(d, 0.0, 1.0);         // bright cell centers, dark borders
     }
-    // TODO: mode 1 (Flow — domain-warped), mode 2 (Plasma), mode 4 (Field),
-    //       mode 3 (Source Image). Authored in their own tasks.
+    // TODO: mode 3 (Source Image). Authored in its own task.
     return 0.0;
   }
 
