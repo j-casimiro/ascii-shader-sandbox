@@ -175,7 +175,12 @@ export function AsciiShader() {
       );
     }
     return (
-      <ShaderCanvas config={config} theme={activeTheme} canvasRef={canvasRef} exportRef={exportRef} />
+      <ShaderCanvas
+        config={config}
+        theme={activeTheme}
+        canvasRef={canvasRef}
+        exportRef={exportRef}
+      />
     );
   }
 
@@ -242,7 +247,7 @@ export function AsciiShader() {
 
         {/* Constrained right sidebar of controls. */}
         <aside
-          className={`sidebar-scroll fixed inset-y-0 right-0 z-40 w-[85vw] sm:w-[380px] bg-sidebar border-l border-border flex flex-col transform transition-transform duration-300 ease-in-out lg:static lg:w-85 lg:shrink-0 lg:h-full lg:flex lg:flex-col lg:bg-transparent lg:border-l-0 lg:translate-x-0 ${
+          className={`sidebar-scroll fixed inset-y-0 right-0 z-40 w-[85vw] sm:w-95 bg-sidebar border-l border-border flex flex-col transform transition-transform duration-300 ease-in-out lg:static lg:w-85 lg:shrink-0 lg:h-full lg:flex lg:flex-col lg:bg-transparent lg:border-l-0 lg:translate-x-0 ${
             sidebarOpen ? 'translate-x-0' : 'translate-x-full'
           }`}
         >

@@ -625,7 +625,7 @@ export function CellularAutomataShader({
         exportRef.current = null;
       }
     };
-  }, [crt, exportRef]);
+  }, [brightness, charHeight, charWidth, chars, colorBg, colorGradEnd, colorGradStart, colorMode, colorSolid, crt, exportRef, speed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

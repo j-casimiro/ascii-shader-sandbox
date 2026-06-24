@@ -567,7 +567,7 @@ export function BlackholeShader({
         exportRef.current = null;
       }
     };
-  }, [crt, exportRef]);
+  }, [brightness, charHeight, charWidth, chars, colorBg, colorGradEnd, colorGradStart, colorMode, colorSolid, crt, exportRef, speed]);
 
   // WebGL1 initialization + render loop (set up once).
   useEffect(() => {

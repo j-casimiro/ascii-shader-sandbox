@@ -547,7 +547,7 @@ export function TuringShader({
         exportRef.current = null;
       }
     };
-  }, [crt, exportRef]);
+  }, [brightness, charHeight, charWidth, chars, colorBg, colorGradEnd, colorGradStart, colorMode, colorSolid, crt, exportRef, speed]);
 
   // WebGL2 initialization + render loop (set up once).
   useEffect(() => {

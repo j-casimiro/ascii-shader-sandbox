@@ -2,7 +2,6 @@ import type { ShaderMode } from '@/types/shader';
 import {
   ASCII_RAMP,
   BINARY_RAMP,
-  BLOCKS_RAMP,
   DETAILED_RAMP,
   LIFE_RAMP,
   MINIMAL_RAMP,
@@ -92,8 +91,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
     usesScale: false,
     separateComponent: true,
     defaults: {
-      chars: BLOCKS_RAMP,
-      themeId: 'paper-print',
+      chars: DETAILED_RAMP,
+      themeId: 'volcanic-glow',
       speed: 0.75,
     },
   },
