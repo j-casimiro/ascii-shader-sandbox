@@ -1,5 +1,10 @@
 # ASCII Shader Sandbox
 
+<img width="1522" height="868" alt="ascii-shader" src="https://github.com/user-attachments/assets/e2e142dc-89ef-4d1e-8d0d-88354b3f864a" />
+<img width="1522" height="868" alt="ascii-shader (2)" src="https://github.com/user-attachments/assets/00934a8d-25a7-41e5-ad2e-e577e2faff06" />
+<img width="1522" height="868" alt="ascii-shader (1)" src="https://github.com/user-attachments/assets/38c97c3e-c9a6-451a-9152-5ff09b3cec22" />
+
+
 A real-time, GPU-accelerated ASCII-art generator. Procedural and simulated
 visuals are rendered with WebGL, then resampled onto a grid of monospace glyphs
 so the output always reads as terminal-style text art.
