@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Maximize2, Moon, Sun } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Maximize2, Moon, Sun } from 'lucide-react';
 
-import { Button } from '@/components/ui/button'
-import { ControlPanel } from '@/components/control-panel'
-import { ShaderCanvas } from '@/components/shader-canvas'
-import { BlackholeShader } from '@/components/blackhole-shader'
-import { TuringShader } from '@/components/turing-shader'
+import { Button } from '@/components/ui/button';
+import { ControlPanel } from '@/components/control-panel';
+import { ShaderCanvas } from '@/components/shader-canvas';
+import { BlackholeShader } from '@/components/blackhole-shader';
+import { TuringShader } from '@/components/turing-shader';
 
-import { useTheme } from '@/hooks/use-theme'
-import { getTheme, DEFAULT_THEME_ID } from '@/config/themes'
-import { DEFAULT_RAMP } from '@/config/ramps'
-import { DEFAULT_CONFIG, getModeDef } from '@/config/modes'
-import type { ShaderConfig } from '@/types/shader'
+import { useTheme } from '@/hooks/use-theme';
+import { getTheme, DEFAULT_THEME_ID } from '@/config/themes';
+import { DEFAULT_RAMP } from '@/config/ramps';
+import { DEFAULT_CONFIG, getModeDef } from '@/config/modes';
+import type { ShaderConfig } from '@/types/shader';
 
 const INITIAL_CONFIG: ShaderConfig = {
   mode: DEFAULT_CONFIG.mode,
@@ -25,49 +25,49 @@ const INITIAL_CONFIG: ShaderConfig = {
   themeId: DEFAULT_THEME_ID,
   imageSrc: null,
   imageUseColors: false,
-}
+};
 
 /** Container: owns live config, screensaver state, and renderer routing. */
 export function AsciiShader() {
-  const [config, setConfig] = useState<ShaderConfig>(INITIAL_CONFIG)
-  const [screensaver, setScreensaver] = useState(false)
-  const { theme: uiTheme, toggleTheme } = useTheme()
+  const [config, setConfig] = useState<ShaderConfig>(INITIAL_CONFIG);
+  const [screensaver, setScreensaver] = useState(false);
+  const { theme: uiTheme, toggleTheme } = useTheme();
 
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const activeTheme = getTheme(config.themeId)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const activeTheme = getTheme(config.themeId);
 
   const update = useCallback((patch: Partial<ShaderConfig>) => {
-    setConfig((prev) => ({ ...prev, ...patch }))
-  }, [])
+    setConfig((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   // Screensaver exits on any key press or mouse click.
   useEffect(() => {
-    if (!screensaver) return
-    const exit = () => setScreensaver(false)
-    window.addEventListener('keydown', exit)
-    window.addEventListener('mousedown', exit)
+    if (!screensaver) return;
+    const exit = () => setScreensaver(false);
+    window.addEventListener('keydown', exit);
+    window.addEventListener('mousedown', exit);
     return () => {
-      window.removeEventListener('keydown', exit)
-      window.removeEventListener('mousedown', exit)
-    }
-  }, [screensaver])
+      window.removeEventListener('keydown', exit);
+      window.removeEventListener('mousedown', exit);
+    };
+  }, [screensaver]);
 
   // ── Export actions (framebuffer/CPU snapshot wiring lands with the shaders).
   const downloadPng = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const link = document.createElement('a')
-    link.download = 'ascii-shader.png'
-    link.href = canvas.toDataURL('image/png')
-    link.click()
-  }, [])
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = 'ascii-shader.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }, []);
 
   const copyHtml = useCallback(() => {
     // TODO: emit a themed <pre> embed from the current frame.
-    void navigator.clipboard?.writeText('')
-  }, [])
+    void navigator.clipboard?.writeText('');
+  }, []);
 
-  const modeDef = getModeDef(config.mode)
+  const modeDef = getModeDef(config.mode);
 
   function renderActiveShader() {
     if (config.mode === 5) {
@@ -88,7 +88,7 @@ export function AsciiShader() {
           onExitParentScreensaver={() => setScreensaver(false)}
           externalCanvasRef={canvasRef}
         />
-      )
+      );
     }
     if (config.mode === 6) {
       return (
@@ -108,16 +108,18 @@ export function AsciiShader() {
           onExitParentScreensaver={() => setScreensaver(false)}
           externalCanvasRef={canvasRef}
         />
-      )
+      );
     }
-    return <ShaderCanvas config={config} theme={activeTheme} canvasRef={canvasRef} />
+    return (
+      <ShaderCanvas config={config} theme={activeTheme} canvasRef={canvasRef} />
+    );
   }
 
   // ── Screensaver: cover the viewport; exits on key/click (listeners above).
   if (screensaver) {
     return (
       <div className="fixed inset-0 z-50 bg-black">{renderActiveShader()}</div>
-    )
+    );
   }
 
   return (
@@ -140,7 +142,11 @@ export function AsciiShader() {
           >
             {uiTheme === 'dark' ? <Sun /> : <Moon />}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setScreensaver(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setScreensaver(true)}
+          >
             <Maximize2 />
             Screensaver
           </Button>
@@ -154,7 +160,7 @@ export function AsciiShader() {
         </section>
 
         {/* Constrained right sidebar of controls. */}
-        <aside className="sidebar-scroll w-full lg:w-[340px] lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto pr-1">
+        <aside className="sidebar-scroll w-full lg:w-85 lg:shrink-0 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto pr-1">
           <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground">
             {modeDef.name}
           </p>
@@ -167,5 +173,5 @@ export function AsciiShader() {
         </aside>
       </main>
     </div>
-  )
+  );
 }

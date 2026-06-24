@@ -1,30 +1,30 @@
-import { useRef } from 'react'
-import { Code2, Download, ImagePlus, Trash2 } from 'lucide-react'
+import { useRef } from 'react';
+import { Code2, Download, ImagePlus, Trash2 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
-import { ControlSection } from '@/components/controls/control-section'
-import { SliderControl } from '@/components/controls/slider-control'
+} from '@/components/ui/select';
+import { ControlSection } from '@/components/controls/control-section';
+import { SliderControl } from '@/components/controls/slider-control';
 
-import { COLOR_THEMES } from '@/config/themes'
-import { GLYPH_RAMPS } from '@/config/ramps'
-import { SHADER_MODES, getModeDef } from '@/config/modes'
-import type { ShaderConfig, ShaderMode } from '@/types/shader'
+import { COLOR_THEMES } from '@/config/themes';
+import { GLYPH_RAMPS } from '@/config/ramps';
+import { SHADER_MODES, getModeDef } from '@/config/modes';
+import type { ShaderConfig, ShaderMode } from '@/types/shader';
 
 interface ControlPanelProps {
-  config: ShaderConfig
-  onChange: (patch: Partial<ShaderConfig>) => void
-  onCopyHtml: () => void
-  onDownloadPng: () => void
+  config: ShaderConfig;
+  onChange: (patch: Partial<ShaderConfig>) => void;
+  onCopyHtml: () => void;
+  onDownloadPng: () => void;
 }
 
 export function ControlPanel({
@@ -33,14 +33,14 @@ export function ControlPanel({
   onCopyHtml,
   onDownloadPng,
 }: ControlPanelProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const modeDef = getModeDef(config.mode)
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const modeDef = getModeDef(config.mode);
 
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const url = URL.createObjectURL(file)
-    onChange({ imageSrc: url })
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    onChange({ imageSrc: url });
   }
 
   return (
@@ -246,5 +246,5 @@ export function ControlPanel({
         </Button>
       </ControlSection>
     </div>
-  )
+  );
 }
