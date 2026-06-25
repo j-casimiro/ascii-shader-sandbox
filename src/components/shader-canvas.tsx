@@ -100,6 +100,12 @@ const FRAGMENT_SHADER = `
     return sqrt(minDist);
   }
 
+  // ── Connected-Truchet primitive (mode 11) ─────────────────────────
+  // Distance to the full circle of radius r centered at c. Only the segment
+  // inside the unit cell is ever shaded, so a corner-centered circle reads as
+  // a quarter arc and an edge-centered one as a half-bump.
+  float tCircle(vec2 p, vec2 c, float r) { return abs(length(p - c) - r); }
+
   // ── Source image sampling (mode 3) ────────────────────────────────
   // "Cover" fit: scale the sampled region so the image fills the canvas with
   // no stretching (overflow on the long axis is cropped). Y is flipped because
@@ -219,6 +225,78 @@ const FRAGMENT_SHADER = `
                      + rnd.x * 6.2831 - u_time * (1.2 + rnd.y * 1.6));
 
       return line * pulse;
+    } else if (u_mode == 11) {
+      // Mode 11 — Connected Truchet: a 2-port-per-edge tile set. The trick is
+      // that EVERY tile, in EVERY orientation, terminates its arcs/lines at the
+      // same eight fixed edge points (the 1/4 and 3/4 marks on each side). Those
+      // eight points map onto themselves under a 90° turn, so a tile spun by any
+      // multiple of 90° still meets its neighbours — the weave can never break.
+      //
+      // Tiles never translate: each cell draws one fixed random tile at a fixed
+      // random load orientation, then snaps through crisp 90° rotations — it
+      // detaches mid-turn and clicks back connected at each quarter-turn rest.
+      vec2 p = uv;
+      p.x *= u_resolution.x / u_resolution.y;     // aspect-correct square tiles
+      p *= u_scale;
+      vec2 cell = floor(p);
+      vec2 f = fract(p);
+
+      vec2 rnd = hash2(cell);
+
+      // Stepped quarter-turn: hold for the first ~65% of each beat (a clean,
+      // connected rest), then ease one 90° turn over the last ~35%. Per-cell
+      // rate + phase so cells turn independently, never as one marching wave.
+      float rate  = 0.25 + rnd.y * 0.6;
+      float beat  = u_time * rate + rnd.x * 12.566;       // + random phase
+      float turns = floor(beat) + smoothstep(0.65, 1.0, fract(beat));
+      float init  = floor(rnd.x * 4.0);                   // random load orientation
+      float ang   = (turns + init) * 1.5707963;           // radians
+
+      // Spin the cell's local coords about its own centre by the animated angle.
+      vec2 q = f - 0.5;
+      float cs = cos(ang), sn = sin(ang);
+      q = mat2(cs, -sn, sn, cs) * q;
+      f = q + 0.5;
+
+      // Pick one fixed tile from the 7-tile family for this cell. Each tile is
+      // a perfect matching of the eight ports built from three primitives:
+      // small corner arc (r=.25), large corner arc (r=.75), edge bump (r=.25),
+      // and axis-aligned straight lines at the 1/4 and 3/4 marks.
+      int tile = int(floor(hash(cell + 31.7) * 7.0));
+      float d = 10.0;
+      if (tile == 0) {
+        // four small corner arcs (90°-symmetric)
+        d = min(min(tCircle(f, vec2(0.0, 0.0), 0.25), tCircle(f, vec2(1.0, 0.0), 0.25)),
+                min(tCircle(f, vec2(1.0, 1.0), 0.25), tCircle(f, vec2(0.0, 1.0), 0.25)));
+      } else if (tile == 1) {
+        // concentric double arcs on two opposite corners
+        d = min(min(tCircle(f, vec2(0.0, 0.0), 0.25), tCircle(f, vec2(0.0, 0.0), 0.75)),
+                min(tCircle(f, vec2(1.0, 1.0), 0.25), tCircle(f, vec2(1.0, 1.0), 0.75)));
+      } else if (tile == 2) {
+        // two parallel straights + two edge bumps (the classic "t2" look)
+        d = min(min(abs(f.y - 0.25), abs(f.y - 0.75)),
+                min(tCircle(f, vec2(0.5, 0.0), 0.25), tCircle(f, vec2(0.5, 1.0), 0.25)));
+      } else if (tile == 3) {
+        // woven grid: two verticals crossing two horizontals (90°-symmetric)
+        d = min(min(abs(f.x - 0.25), abs(f.x - 0.75)),
+                min(abs(f.y - 0.25), abs(f.y - 0.75)));
+      } else if (tile == 4) {
+        // one straight + a bump + two small corner arcs (asymmetric)
+        d = min(min(abs(f.y - 0.25), tCircle(f, vec2(0.5, 0.0), 0.25)),
+                min(tCircle(f, vec2(1.0, 1.0), 0.25), tCircle(f, vec2(0.0, 1.0), 0.25)));
+      } else if (tile == 5) {
+        // small arc + large sweeping arc + a vertical + a horizontal (busy weave)
+        d = min(min(tCircle(f, vec2(0.0, 0.0), 0.25), tCircle(f, vec2(1.0, 1.0), 0.75)),
+                min(abs(f.x - 0.75), abs(f.y - 0.75)));
+      } else {
+        // four edge bumps — pairs with neighbours' bumps into full rings
+        d = min(min(tCircle(f, vec2(0.5, 0.0), 0.25), tCircle(f, vec2(1.0, 0.5), 0.25)),
+                min(tCircle(f, vec2(0.5, 1.0), 0.25), tCircle(f, vec2(0.0, 0.5), 0.25)));
+      }
+
+      // Bold solid core + soft outer glow so thin ramps still read as a line.
+      float line = smoothstep(0.085, 0.03, d) + 0.35 * smoothstep(0.2, 0.085, d);
+      return clamp(line, 0.0, 1.0);
     }
     return 0.0;
   }

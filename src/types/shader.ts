@@ -29,6 +29,7 @@ export type ShaderMode =
   | 8 // automata    (own 2D canvas renderer — cellular-automata-shader.tsx)
   | 9 // pewdiepie   (domain-warped wavy diagonal stripes)
   | 10 // truchet    (randomly oriented quarter-circle arc tiles)
+  | 11 // truchet tiles (2-port multi-tile set; fixed cells that spin 90°, always connected)
 
 /** A selectable color theme. */
 export interface ColorTheme {

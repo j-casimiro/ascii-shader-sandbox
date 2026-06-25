@@ -185,6 +185,22 @@ export const SHADER_MODES: ShaderModeDef[] = [
       brightness: 1.3,
     },
   },
+  {
+    mode: 11,
+    name: 'Truchet Tiles',
+    description: 'Fixed 2-port tiles that spin 90°, always connected.',
+    usesScale: true,
+    separateComponent: false,
+    defaults: {
+      chars: BLOCKS_RAMP,
+      themeId: 'classic-bw',
+      speed: 0.6,
+      charWidth: 6,
+      charHeight: 9,
+      scale: 5.0,
+      brightness: 1.3,
+    },
+  },
 ];
 
 export function getModeDef(mode: ShaderMode): ShaderModeDef {
