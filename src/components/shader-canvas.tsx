@@ -654,7 +654,9 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
     )
 
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1
+      // Cap DPR at 2 — beyond that the extra fragments are detail the cell grid
+      // can't resolve. dpr ≤ 2 (the common case) is unchanged.
+      const dpr = Math.min(2, window.devicePixelRatio || 1)
       const w = Math.max(1, container.clientWidth)
       const h = Math.max(1, container.clientHeight)
       canvas.width = w * dpr
@@ -670,6 +672,12 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
     let elapsed = 0
 
     const render = (ts: number) => {
+      rafId = requestAnimationFrame(render)
+      // Don't burn GPU/CPU while the tab is hidden; resume without a time jump.
+      if (document.hidden) {
+        prevTime = 0
+        return
+      }
       if (prevTime === 0) prevTime = ts
       const dt = (ts - prevTime) / 1000
       prevTime = ts
@@ -710,7 +718,6 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
       }
 
       gl.drawArrays(gl.TRIANGLES, 0, 6)
-      rafId = requestAnimationFrame(render)
     }
     rafId = requestAnimationFrame(render)
 

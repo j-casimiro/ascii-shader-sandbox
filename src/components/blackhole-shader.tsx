@@ -40,6 +40,17 @@ const FRAGMENT_SHADER = `
   uniform int       u_is_data_pass;
   uniform int       u_show_real_colors;
 
+  // Two-pass per-cell rendering:
+  //   u_pass 0 = intensity pass — raymarch ONCE per character cell into a small
+  //              float target (one texel per cell).
+  //   u_pass 1 = display pass   — sample that per-cell texture and do the cheap
+  //              glyph lookup at full resolution.
+  //   u_pass 2 = legacy single full-res pass (fallback when float render targets
+  //              are unavailable, and used by the static HTML export).
+  uniform int       u_pass;
+  uniform sampler2D u_intensity;   // per-cell color (rgb) + glyph value (a)
+  uniform vec2      u_cell_grid;   // intensity-target size in cells (cols, rows)
+
   varying vec2 vUv;
 
   // ── Noise helpers ──────────────────────────────────────────────
@@ -97,18 +108,14 @@ const FRAGMENT_SHADER = `
     return vec2(-b - h, -b + h);
   }
 
-  void main() {
-    // 1. Grid setup for ASCII lookup
-    vec2 gridCoords = floor(gl_FragCoord.xy / u_grid_size);
-    vec2 localCoords = fract(gl_FragCoord.xy / u_grid_size);
-    
-    vec2 uv;
-    if (u_show_real_colors == 1) {
-      uv = gl_FragCoord.xy / u_resolution;
-    } else {
-      uv = (gridCoords + 0.5) * u_grid_size / u_resolution;
-    }
-
+  // ── One photon ray ────────────────────────────────────────────────
+  // Integrate a single backward null geodesic for the given normalized screen
+  // coordinate uv and return the accreted disk colour, coverage alpha, and
+  // whether the ray fell through the event horizon. dither jitters the start
+  // point to break up banding (seeded per-cell or per-pixel by the caller).
+  // Pulled out of main() so the expensive march can run once per CELL in the
+  // intensity pass instead of once per pixel.
+  void raymarch(vec2 uv, float dither, out vec3 color, out float alpha, out bool hitHorizon) {
     // Aspect-corrected coordinates centered at (0,0)
     float aspect = u_resolution.x / u_resolution.y;
     vec2 p = uv - 0.5;
@@ -130,9 +137,9 @@ const FRAGMENT_SHADER = `
     float r_in = 2.2;      // Inner radius of the accretion disk
     float r_out = 8.5;     // Outer radius of the accretion disk
 
-    vec3 color = vec3(0.0);
-    float alpha = 0.0;
-    bool hitHorizon = false;
+    color = vec3(0.0);
+    alpha = 0.0;
+    hitHorizon = false;
 
     // ── Photon geodesic state ──────────────────────────────────────
     // Integrate the Schwarzschild null geodesic so light bends strongly
@@ -145,12 +152,6 @@ const FRAGMENT_SHADER = `
     float h2 = dot(angMom, angMom);
 
     // Dither start position slightly to break up banding
-    float dither;
-    if (u_show_real_colors == 1) {
-      dither = hash(gl_FragCoord.xy);
-    } else {
-      dither = hash(gridCoords);
-    }
     pos += vel * dither * 0.18;
 
     vec3 dir = vel;
@@ -244,16 +245,29 @@ const FRAGMENT_SHADER = `
       color += (1.0 - alpha) * starColor;
       alpha += (1.0 - alpha) * starIntensity;
     }
+  }
 
-    // Apply brightness control
-    float finalGlow = alpha * u_brightness * 1.5;
-    float val = clamp(finalGlow, 0.0, 1.0);
+  void main() {
+    // ── Pass 0: intensity. Render one raymarch per CELL into the float target.
+    // gl_FragCoord here addresses the small (cols × rows) buffer, so flooring it
+    // yields the cell index; the ray is cast through that cell's centre — exactly
+    // the sample the legacy single pass used, so the result is identical.
+    if (u_pass == 0) {
+      vec2 cellIndex = floor(gl_FragCoord.xy);
+      vec2 uv = (cellIndex + 0.5) * u_grid_size / u_resolution;
+      vec3 color; float alpha; bool hitHorizon;
+      raymarch(uv, hash(cellIndex), color, alpha, hitHorizon);
+      // Pack the glyph value (brightness-scaled coverage) into alpha; the raw
+      // HDR colour stays in rgb (the float target preserves >1 highlights).
+      gl_FragColor = vec4(color, clamp(alpha * u_brightness * 1.5, 0.0, 1.0));
+      return;
+    }
 
-    // ─── ASCII character lookup ─────────────────────────────
-    float charIdx = floor(val * u_char_count);
-    charIdx = clamp(charIdx, 0.0, u_char_count - 1.0);
-
+    // ── Real Graphics: smooth, genuinely per-pixel raymarch (no cell quantize).
     if (u_show_real_colors == 1) {
+      vec2 uv = gl_FragCoord.xy / u_resolution;
+      vec3 color; float alpha; bool hitHorizon;
+      raymarch(uv, hash(gl_FragCoord.xy), color, alpha, hitHorizon);
       vec3 finalColor = mix(u_color_bg, color, alpha);
       if (hitHorizon) {
         finalColor = mix(vec3(0.0), color, alpha);
@@ -262,11 +276,27 @@ const FRAGMENT_SHADER = `
       return;
     }
 
-    if (u_is_data_pass == 1) {
-      gl_FragColor = vec4(charIdx / 255.0, color.r, color.g, color.b);
-      return;
+    // ── ASCII display. Either sample the per-cell intensity texture (pass 1,
+    // the fast two-pass path) or recompute it per pixel (pass 2, the legacy
+    // fallback / static export), then composite the theme-tinted glyph.
+    vec2 gridCoords  = floor(gl_FragCoord.xy / u_grid_size);
+    vec2 localCoords = fract(gl_FragCoord.xy / u_grid_size);
+
+    vec3 color;
+    float val;
+    if (u_pass == 1) {
+      vec4 cell = texture2D(u_intensity, (gridCoords + 0.5) / u_cell_grid);
+      color = cell.rgb;
+      val = cell.a;
+    } else {
+      vec2 uv = (gridCoords + 0.5) * u_grid_size / u_resolution;
+      vec3 c; float a; bool hh;
+      raymarch(uv, hash(gridCoords), c, a, hh);
+      color = c;
+      val = clamp(a * u_brightness * 1.5, 0.0, 1.0);
     }
 
+    float charIdx = clamp(floor(val * u_char_count), 0.0, u_char_count - 1.0);
     vec2 fontUv = vec2((charIdx + localCoords.x) / u_char_count, localCoords.y);
     float charIntensity = texture2D(u_font_atlas, fontUv).r;
 
@@ -458,7 +488,8 @@ export function BlackholeShader({
   [
     'u_resolution', 'u_time', 'u_grid_size', 'u_speed', 'u_brightness',
     'u_color_mode', 'u_color_solid', 'u_color_grad_start', 'u_color_grad_end',
-    'u_color_bg', 'u_font_atlas', 'u_char_count', 'u_is_data_pass', 'u_show_real_colors'
+    'u_color_bg', 'u_font_atlas', 'u_char_count', 'u_is_data_pass', 'u_show_real_colors',
+    'u_pass'
   ].forEach(name => {
     uniforms[name] = gl.getUniformLocation(program, name);
   });
@@ -536,6 +567,8 @@ export function BlackholeShader({
     gl.uniform3fv(uniforms.u_color_bg, colorBg);
     gl.uniform1i(uniforms.u_is_data_pass, 0);
     gl.uniform1i(uniforms.u_show_real_colors, ${showRealColors ? 1 : 0});
+    // Static export uses the legacy single full-res pass (no FBO round-trip).
+    gl.uniform1i(uniforms.u_pass, 2);
 
     if (fontAtlasTexture) {
       gl.activeTexture(gl.TEXTURE0);
@@ -652,6 +685,84 @@ export function BlackholeShader({
     gl.enableVertexAttribArray(posLoc);
     gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
+    // Cache uniform locations once. getUniformLocation is a synchronous driver
+    // query; calling it per-frame stalls the main thread and starves the
+    // compositor (visible as menu/UI lag while this heavy shader runs).
+    const u: Record<string, WebGLUniformLocation | null> = {};
+    for (const name of [
+      'u_resolution',
+      'u_time',
+      'u_grid_size',
+      'u_char_count',
+      'u_speed',
+      'u_brightness',
+      'u_color_mode',
+      'u_color_solid',
+      'u_color_grad_start',
+      'u_color_grad_end',
+      'u_color_bg',
+      'u_is_data_pass',
+      'u_show_real_colors',
+      'u_font_atlas',
+      'u_pass',
+      'u_intensity',
+      'u_cell_grid',
+    ]) {
+      u[name] = gl.getUniformLocation(program, name);
+    }
+
+    // ── Per-cell intensity target (the two-pass fast path) ───────────────
+    // Float render target so the raymarch's HDR colour survives the round-trip
+    // (8-bit would clamp the bright doppler/bloom highlights and shift glyph
+    // edges). If float targets aren't renderable, twoPass stays false and we
+    // fall back to the legacy full-res single pass (u_pass = 2).
+    gl.getExtension('OES_texture_float');
+    gl.getExtension('OES_texture_float_linear');
+    gl.getExtension('WEBGL_color_buffer_float');
+    let twoPass = true;
+    let intensityTex: WebGLTexture | null = null;
+    let intensityFbo: WebGLFramebuffer | null = null;
+    let cellCols = 0;
+    let cellRows = 0;
+
+    // (Re)allocate the intensity target to one texel per character cell.
+    const ensureIntensityTarget = (cols: number, rows: number): boolean => {
+      if (intensityTex && cols === cellCols && rows === cellRows) return true;
+      if (intensityTex) gl.deleteTexture(intensityTex);
+      if (intensityFbo) gl.deleteFramebuffer(intensityFbo);
+
+      intensityTex = gl.createTexture();
+      // Allocate on the dedicated intensity unit (1), NOT the active unit — the
+      // caller leaves unit 0 holding the font atlas with u_font_atlas pointing at
+      // it, so binding here would clobber unit 0 and make u_font_atlas reference
+      // this texture. Pass A then draws into the FBO this texture backs, forming a
+      // feedback loop (the error that fires on the first frame and every resize).
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, intensityTex);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.FLOAT, null,
+      );
+      // One texel per cell, sampled exactly at the cell — NEAREST, no wrap.
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+      intensityFbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, intensityFbo);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, intensityTex, 0,
+      );
+      const complete =
+        gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      // Leave the intensity unit clean; Pass A re-asserts this and Pass B rebinds.
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      cellCols = cols;
+      cellRows = rows;
+      return complete;
+    };
+
     buildFontAtlas(
       gl,
       charsRef.current,
@@ -662,7 +773,11 @@ export function BlackholeShader({
     const resizeObserver = new ResizeObserver(() => {
       const parent = canvas.parentElement;
       if (parent) {
-        const dpr = window.devicePixelRatio || 1;
+        // Cap the backing-store DPR at 2: this is the heaviest shader, and
+        // 3×-DPI panels (most phones, some 4K laptops) would otherwise pay ~2.25×
+        // the fragments for detail the ASCII grid can't show. dpr ≤ 2 is
+        // unchanged, so the common Retina case looks identical.
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
         canvas.width = parent.clientWidth * dpr;
         canvas.height = (parent.clientHeight || 500) * dpr;
         gl.viewport(0, 0, canvas.width, canvas.height);
@@ -673,76 +788,100 @@ export function BlackholeShader({
     let lastTime = 0;
 
     const render = (now: number) => {
-      if (lastTime === 0) {
-        lastTime = now;
-        animationFrameIdRef.current = requestAnimationFrame(render);
+      animationFrameIdRef.current = requestAnimationFrame(render);
+
+      // Pause entirely while the tab is hidden (resume cleanly, no time jump).
+      if (document.hidden) {
+        lastTime = 0;
         return;
       }
+      if (lastTime === 0) {
+        lastTime = now;
+        return;
+      }
+
+      // The full-res paths (Real Graphics, or the legacy fallback) are
+      // fragment-bound, so cap them at ~30fps for headroom on low-end GPUs. The
+      // cheap two-pass ASCII path runs uncapped.
+      const realGraphics = showRealColorsRef.current;
+      const fullRes = realGraphics || !twoPass;
+      if (fullRes && now - lastTime < 1000 / 30) return;
+
       const dt = (now - lastTime) * 0.001;
       lastTime = now;
       timeRef.current += dt;
 
       gl.useProgram(program);
 
-      gl.uniform2f(
-        gl.getUniformLocation(program, 'u_resolution'),
-        canvas.width,
-        canvas.height,
-      );
-      gl.uniform1f(gl.getUniformLocation(program, 'u_time'), timeRef.current);
-      gl.uniform2f(
-        gl.getUniformLocation(program, 'u_grid_size'),
-        charWidthRef.current,
-        charHeightRef.current,
-      );
-      gl.uniform1f(
-        gl.getUniformLocation(program, 'u_char_count'),
-        charsRef.current.length,
-      );
-      gl.uniform1f(gl.getUniformLocation(program, 'u_speed'), speedRef.current);
-      gl.uniform1f(
-        gl.getUniformLocation(program, 'u_brightness'),
-        brightnessRef.current,
-      );
+      // Shared uniforms (u_resolution stays the full canvas size in BOTH passes
+      // so the per-cell uv mapping matches the legacy single pass exactly).
+      gl.uniform2f(u.u_resolution, canvas.width, canvas.height);
+      gl.uniform1f(u.u_time, timeRef.current);
+      gl.uniform2f(u.u_grid_size, charWidthRef.current, charHeightRef.current);
+      gl.uniform1f(u.u_char_count, charsRef.current.length);
+      gl.uniform1f(u.u_speed, speedRef.current);
+      gl.uniform1f(u.u_brightness, brightnessRef.current);
+      gl.uniform1i(u.u_color_mode, colorModeRef.current);
+      gl.uniform3fv(u.u_color_solid, colorSolidRef.current);
+      gl.uniform3fv(u.u_color_grad_start, colorGradStartRef.current);
+      gl.uniform3fv(u.u_color_grad_end, colorGradEndRef.current);
+      gl.uniform3fv(u.u_color_bg, colorBgRef.current);
+      gl.uniform1i(u.u_is_data_pass, 0);
+      gl.uniform1i(u.u_show_real_colors, realGraphics ? 1 : 0);
 
-      gl.uniform1i(
-        gl.getUniformLocation(program, 'u_color_mode'),
-        colorModeRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(program, 'u_color_solid'),
-        colorSolidRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(program, 'u_color_grad_start'),
-        colorGradStartRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(program, 'u_color_grad_end'),
-        colorGradEndRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(program, 'u_color_bg'),
-        colorBgRef.current,
-      );
-      gl.uniform1i(
-        gl.getUniformLocation(program, 'u_is_data_pass'),
-        0,
-      );
-      gl.uniform1i(
-        gl.getUniformLocation(program, 'u_show_real_colors'),
-        showRealColorsRef.current ? 1 : 0,
-      );
-
-      // Bind font atlas
+      // Font atlas on unit 0 (used by the display / legacy passes).
       if (fontAtlasTextureRef.current) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, fontAtlasTextureRef.current);
-        gl.uniform1i(gl.getUniformLocation(program, 'u_font_atlas'), 0);
+        gl.uniform1i(u.u_font_atlas, 0);
       }
 
+      if (fullRes) {
+        // Single full-res pass. u_pass = 2 (legacy ASCII); the Real-Graphics
+        // branch is selected inside the shader by u_show_real_colors.
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.uniform1i(u.u_pass, 2);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        return;
+      }
+
+      // Two-pass: one raymarch per cell, then a cheap full-res glyph pass.
+      const cols = Math.max(1, Math.ceil(canvas.width / charWidthRef.current));
+      const rows = Math.max(1, Math.ceil(canvas.height / charHeightRef.current));
+      if (!ensureIntensityTarget(cols, rows)) {
+        // Float target not renderable on this GPU — drop to the legacy path.
+        twoPass = false;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.uniform1i(u.u_pass, 2);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        return;
+      }
+
+      // Pass A — intensity into the per-cell float target. First detach the
+      // intensity texture from its sampler unit: it is THIS framebuffer's colour
+      // attachment, and pass B left it bound to u_intensity (unit 1). Drawing
+      // into a framebuffer while its attachment is still sampleable by the active
+      // program forms a feedback loop — WebGL rejects the draw with
+      // GL_INVALID_OPERATION, so the cell target never fills and the ASCII grid
+      // stays blank.
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, intensityFbo);
+      gl.viewport(0, 0, cols, rows);
+      gl.uniform1i(u.u_pass, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 6);
-      animationFrameIdRef.current = requestAnimationFrame(render);
+
+      // Pass B — sample the per-cell target + glyph lookup at full resolution.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.uniform1i(u.u_pass, 1);
+      gl.uniform2f(u.u_cell_grid, cols, rows);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, intensityTex);
+      gl.uniform1i(u.u_intensity, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
     };
 
     animationFrameIdRef.current = requestAnimationFrame(render);
@@ -758,6 +897,8 @@ export function BlackholeShader({
         gl.deleteTexture(fontAtlasTextureRef.current);
         fontAtlasTextureRef.current = null;
       }
+      if (intensityTex) gl.deleteTexture(intensityTex);
+      if (intensityFbo) gl.deleteFramebuffer(intensityFbo);
       gl.deleteProgram(program);
       gl.deleteBuffer(buffer);
     };

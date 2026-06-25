@@ -352,7 +352,9 @@ export function MatrixRainShader({
       const parent = canvas.parentElement;
       const width = Math.max(1, parent?.clientWidth ?? 1);
       const height = Math.max(1, parent?.clientHeight ?? 500);
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      // Cap DPR at 2 — fillText over millions of extra sub-pixels on 3×-DPI
+      // panels is pure cost the glyph grid can't show.
+      const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
 
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
@@ -373,6 +375,11 @@ export function MatrixRainShader({
     let previousTime = 0;
 
     const render = (now: number) => {
+      if (document.hidden) {
+        previousTime = 0;
+        animationFrameIdRef.current = requestAnimationFrame(render);
+        return;
+      }
       if (previousTime === 0) previousTime = now;
       const dt = Math.min(0.05, (now - previousTime) / 1000);
       previousTime = now;

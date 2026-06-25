@@ -604,6 +604,31 @@ export function TuringShader({
 
     displayProgramRef.current = displayProgram;
 
+    // Cache uniform locations once per program. getUniformLocation is a
+    // synchronous driver query; calling it per-frame (here, ~16×/frame across
+    // both passes) stalls the main thread and shows up as UI/menu lag.
+    const su: Record<string, WebGLUniformLocation | null> = {};
+    for (const name of ['u_res', 'u_feed', 'u_kill', 'u_state']) {
+      su[name] = gl.getUniformLocation(simProgram, name);
+    }
+    const du: Record<string, WebGLUniformLocation | null> = {};
+    for (const name of [
+      'u_resolution',
+      'u_grid_size',
+      'u_char_count',
+      'u_brightness',
+      'u_color_mode',
+      'u_color_solid',
+      'u_color_grad_start',
+      'u_color_grad_end',
+      'u_color_bg',
+      'u_is_data_pass',
+      'u_state',
+      'u_font_atlas',
+    ]) {
+      du[name] = gl.getUniformLocation(displayProgram, name);
+    }
+
     // Full-screen quad (position attribute is locked to location 0).
     const vertices = new Float32Array([
       -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
@@ -697,7 +722,8 @@ export function TuringShader({
     const resizeObserver = new ResizeObserver(() => {
       const parent = canvas.parentElement;
       if (parent) {
-        const dpr = window.devicePixelRatio || 1;
+        // Cap DPR at 2 — also shrinks the sim grid (canvas/3) on high-DPI.
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
         canvas.width = parent.clientWidth * dpr;
         canvas.height = (parent.clientHeight || 500) * dpr;
         gl.viewport(0, 0, canvas.width, canvas.height);
@@ -711,6 +737,11 @@ export function TuringShader({
     resizeObserver.observe(canvas.parentElement || canvas);
 
     const render = () => {
+      // Pause the reaction-diffusion sim + draw while the tab is hidden.
+      if (document.hidden) {
+        animationFrameIdRef.current = requestAnimationFrame(render);
+        return;
+      }
       const sim = simRef.current;
       if (!sim) {
         animationFrameIdRef.current = requestAnimationFrame(render);
@@ -720,10 +751,10 @@ export function TuringShader({
       // ── Simulation passes (ping-pong) ──────────────────────────────
       gl.useProgram(simProgram);
       gl.viewport(0, 0, sim.w, sim.h);
-      gl.uniform2f(gl.getUniformLocation(simProgram, 'u_res'), sim.w, sim.h);
-      gl.uniform1f(gl.getUniformLocation(simProgram, 'u_feed'), FEED);
-      gl.uniform1f(gl.getUniformLocation(simProgram, 'u_kill'), KILL);
-      gl.uniform1i(gl.getUniformLocation(simProgram, 'u_state'), 0);
+      gl.uniform2f(su.u_res, sim.w, sim.h);
+      gl.uniform1f(su.u_feed, FEED);
+      gl.uniform1f(su.u_kill, KILL);
+      gl.uniform1i(su.u_state, 0);
 
       const iters = Math.max(
         1,
@@ -743,57 +774,25 @@ export function TuringShader({
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.useProgram(displayProgram);
 
-      gl.uniform2f(
-        gl.getUniformLocation(displayProgram, 'u_resolution'),
-        canvas.width,
-        canvas.height,
-      );
-      gl.uniform2f(
-        gl.getUniformLocation(displayProgram, 'u_grid_size'),
-        charWidthRef.current,
-        charHeightRef.current,
-      );
-      gl.uniform1f(
-        gl.getUniformLocation(displayProgram, 'u_char_count'),
-        charsRef.current.length,
-      );
-      gl.uniform1f(
-        gl.getUniformLocation(displayProgram, 'u_brightness'),
-        brightnessRef.current,
-      );
-      gl.uniform1i(
-        gl.getUniformLocation(displayProgram, 'u_color_mode'),
-        colorModeRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(displayProgram, 'u_color_solid'),
-        colorSolidRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(displayProgram, 'u_color_grad_start'),
-        colorGradStartRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(displayProgram, 'u_color_grad_end'),
-        colorGradEndRef.current,
-      );
-      gl.uniform3fv(
-        gl.getUniformLocation(displayProgram, 'u_color_bg'),
-        colorBgRef.current,
-      );
-      gl.uniform1i(
-        gl.getUniformLocation(displayProgram, 'u_is_data_pass'),
-        0,
-      );
+      gl.uniform2f(du.u_resolution, canvas.width, canvas.height);
+      gl.uniform2f(du.u_grid_size, charWidthRef.current, charHeightRef.current);
+      gl.uniform1f(du.u_char_count, charsRef.current.length);
+      gl.uniform1f(du.u_brightness, brightnessRef.current);
+      gl.uniform1i(du.u_color_mode, colorModeRef.current);
+      gl.uniform3fv(du.u_color_solid, colorSolidRef.current);
+      gl.uniform3fv(du.u_color_grad_start, colorGradStartRef.current);
+      gl.uniform3fv(du.u_color_grad_end, colorGradEndRef.current);
+      gl.uniform3fv(du.u_color_bg, colorBgRef.current);
+      gl.uniform1i(du.u_is_data_pass, 0);
 
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, sim.texs[sim.src]);
-      gl.uniform1i(gl.getUniformLocation(displayProgram, 'u_state'), 0);
+      gl.uniform1i(du.u_state, 0);
 
       if (fontAtlasTextureRef.current) {
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, fontAtlasTextureRef.current);
-        gl.uniform1i(gl.getUniformLocation(displayProgram, 'u_font_atlas'), 1);
+        gl.uniform1i(du.u_font_atlas, 1);
       }
 
       gl.drawArrays(gl.TRIANGLES, 0, 6);
