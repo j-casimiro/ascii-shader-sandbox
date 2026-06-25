@@ -15,6 +15,8 @@ export interface ShaderModeDefaults {
   speed: number;
   charWidth: number;
   charHeight: number;
+  scale: number;
+  brightness: number;
 }
 
 export interface ShaderModeDef {
@@ -51,6 +53,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       speed: 0.55,
       charWidth: 7,
       charHeight: 12,
+      scale: 4.0,
+      brightness: 1.0,
     },
   },
   {
@@ -65,6 +69,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       speed: 0.7,
       charWidth: 7,
       charHeight: 12,
+      scale: 4.0,
+      brightness: 1.0,
     },
   },
   {
@@ -79,6 +85,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       speed: 0.45,
       charWidth: 7,
       charHeight: 12,
+      scale: 4.0,
+      brightness: 1.0,
     },
   },
   {
@@ -93,6 +101,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       speed: 0.85,
       charWidth: 5,
       charHeight: 8,
+      scale: 4.0,
+      brightness: 1.0,
     },
   },
   {
@@ -107,6 +117,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       speed: 0.75,
       charWidth: 6,
       charHeight: 9,
+      scale: 4.0,
+      brightness: 1.0,
     },
   },
   {
@@ -121,6 +133,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       speed: 1.2,
       charWidth: 13,
       charHeight: 22,
+      scale: 4.0,
+      brightness: 1.0,
     },
   },
   {
@@ -135,6 +149,8 @@ export const SHADER_MODES: ShaderModeDef[] = [
       speed: 0.45,
       charWidth: 7,
       charHeight: 12,
+      scale: 4.0,
+      brightness: 1.0,
     },
   },
   {
@@ -146,9 +162,11 @@ export const SHADER_MODES: ShaderModeDef[] = [
     defaults: {
       chars: BLOCKS_RAMP,
       themeId: 'pewdiepie',
-      speed: 0.6,
+      speed: 0.3,
       charWidth: 7,
       charHeight: 12,
+      scale: 7.5,
+      brightness: 1.0,
     },
   },
   {
@@ -160,9 +178,11 @@ export const SHADER_MODES: ShaderModeDef[] = [
     defaults: {
       chars: BLOCKS_RAMP,
       themeId: 'ocean-currents',
-      speed: 0.6,
+      speed: 1.0,
       charWidth: 6,
       charHeight: 9,
+      scale: 8.0,
+      brightness: 1.3,
     },
   },
 ];
