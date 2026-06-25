@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Maximize2, Moon, Sun, SlidersHorizontal, X } from 'lucide-react';
+import {
+  Maximize2,
+  Moon,
+  Sun,
+  SlidersHorizontal,
+  Shuffle,
+  Square,
+  X,
+} from 'lucide-react';
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
@@ -23,9 +31,27 @@ import { MatrixRainShader } from '@/components/matrix-rain-shader';
 import { CellularAutomataShader } from '@/components/cellular-automata-shader';
 
 import { useTheme } from '@/hooks/use-theme';
-import { getTheme } from '@/config/themes';
-import { DEFAULT_CONFIG, getModeDef, getModeDefaults } from '@/config/modes';
-import type { ShaderConfig } from '@/types/shader';
+import { COLOR_THEMES, getTheme } from '@/config/themes';
+import {
+  DEFAULT_CONFIG,
+  SHADER_MODES,
+  getModeDef,
+  getModeDefaults,
+} from '@/config/modes';
+import type { ShaderConfig, ShaderMode } from '@/types/shader';
+
+/** Each shader holds the stage for this long before showcase mode advances. */
+const SHOWCASE_INTERVAL_MS = 3500;
+
+/**
+ * Shaders cycled in showcase mode, in display order. The rotation is linear —
+ * first to last, then repeat — so the algorithm never jumps around or repeats
+ * back-to-back; only the per-shader *settings* are randomized. Cellular Automata
+ * (mode 8) is intentionally excluded.
+ */
+const SHOWCASE_MODES: ShaderMode[] = SHADER_MODES.map((m) => m.mode).filter(
+  (m) => m !== 8,
+);
 
 const INITIAL_MODE_DEFAULTS = getModeDefaults(DEFAULT_CONFIG.mode);
 
@@ -51,6 +77,19 @@ export function AsciiShader() {
   const [config, setConfig] = useState<ShaderConfig>(INITIAL_CONFIG);
   const [screensaver, setScreensaver] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Showcase mode: an auto-playing gallery. Keeps the header, hides the sidebar,
+  // and rotates to a new shader + randomized settings every SHOWCASE_INTERVAL_MS.
+  const [showcase, setShowcase] = useState(false);
+  // Whether the user has ever started showcase mode. Drives the "new" badge on
+  // the toggle, which drops away for good after first use. Persisted so it does
+  // not reappear on reload.
+  const [showcaseSeen, setShowcaseSeen] = useState(() => {
+    try {
+      return localStorage.getItem('showcase-seen') === '1';
+    } catch {
+      return false;
+    }
+  });
   const { theme: uiTheme, toggleTheme } = useTheme();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -72,6 +111,60 @@ export function AsciiShader() {
       window.removeEventListener('mousedown', exit);
     };
   }, [screensaver]);
+
+  // ── Showcase cycling engine ────────────────────────────────────────────
+  // While active, step LINEARLY through SHOWCASE_MODES — first to last, then
+  // repeat — so the algorithm order is fixed and never repeats back-to-back.
+  // Each switch starts from that mode's curated defaults (so it looks as
+  // intended, same as the control panel) and layers on randomized *settings*: a
+  // fresh theme every time plus light speed/brightness jitter and an occasional
+  // CRT pass. Heavy params (glyph ramp, cell size, noise scale) stay at the
+  // defaults to keep every frame looking deliberate.
+  useEffect(() => {
+    if (!showcase) return;
+
+    let i = 0;
+    const rand = (min: number, max: number) => min + Math.random() * (max - min);
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    const advance = () => {
+      const mode = SHOWCASE_MODES[i % SHOWCASE_MODES.length];
+      i++;
+
+      const defaults = getModeDefaults(mode);
+      const theme =
+        COLOR_THEMES[Math.floor(Math.random() * COLOR_THEMES.length)];
+
+      update({
+        mode,
+        ...defaults,
+        themeId: theme.id,
+        speed: round2(defaults.speed * rand(0.7, 1.4)),
+        brightness: round2(defaults.brightness * rand(0.85, 1.2)),
+        crt: Math.random() < 0.3,
+        // Showcase is about the algorithms — never the source image, and always
+        // the ASCII rendering for the effects that can also go "real graphics".
+        imageEnabled: false,
+        showRealColors: false,
+        auroraRealGraphics: false,
+      });
+    };
+
+    advance(); // first shader immediately, then on the interval
+    const id = window.setInterval(advance, SHOWCASE_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [showcase, update]);
+
+  // Showcase exits on Escape (the header stays interactive, so — unlike the
+  // screensaver — it must NOT exit on every mouse/key event).
+  useEffect(() => {
+    if (!showcase) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowcase(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showcase]);
 
   // ── Export actions (framebuffer/CPU snapshot wiring lands with the shaders).
   const downloadPng = useCallback(() => {
@@ -227,6 +320,33 @@ export function AsciiShader() {
           >
             {uiTheme === 'dark' ? <Sun /> : <Moon />}
           </Button>
+          <div className="relative">
+            <Button
+              variant={showcase ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => {
+                setShowcase((on) => !on);
+                if (!showcaseSeen) {
+                  setShowcaseSeen(true);
+                  try {
+                    localStorage.setItem('showcase-seen', '1');
+                  } catch {
+                    // Storage unavailable (private mode) — badge just stays.
+                  }
+                }
+              }}
+              aria-label={showcase ? 'Stop showcase' : 'Start showcase'}
+              title={showcase ? 'Stop showcase' : 'Showcase mode'}
+            >
+              {showcase ? <Square /> : <Shuffle />}
+            </Button>
+            {/* "New feature" badge — drops away for good after first use. */}
+            {!showcaseSeen && (
+              <span className="pointer-events-none absolute -right-1 -top-1 rounded-full bg-primary px-1 py-px text-[8px] font-bold uppercase leading-none tracking-wide text-primary-foreground ring-2 ring-background">
+                new
+              </span>
+            )}
+          </div>
           <Button
             variant="outline"
             size="icon"
@@ -235,15 +355,17 @@ export function AsciiShader() {
           >
             <Maximize2 />
           </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="lg:hidden"
-            onClick={() => setSidebarOpen((open) => !open)}
-            aria-label="Toggle settings sidebar"
-          >
-            <SlidersHorizontal />
-          </Button>
+          {!showcase && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="lg:hidden"
+              onClick={() => setSidebarOpen((open) => !open)}
+              aria-label="Toggle settings sidebar"
+            >
+              <SlidersHorizontal />
+            </Button>
+          )}
           <Button
             variant="outline"
             size="icon"
@@ -261,53 +383,75 @@ export function AsciiShader() {
         </div>
       </header>
 
-      <main className="w-full min-h-0 p-0 lg:p-4 flex-1 flex flex-col lg:flex-row lg:gap-6 overflow-hidden relative">
-        {/* Full-bleed canvas — no extra card wrapper. */}
-        <section className="flex-1 min-h-0 lg:rounded-lg overflow-hidden border-0 lg:border border-border">
+      <main
+        className={`w-full min-h-0 flex-1 flex flex-col lg:flex-row lg:gap-6 overflow-hidden relative ${
+          showcase ? 'p-0' : 'p-0 lg:p-4'
+        }`}
+      >
+        {/* Full-bleed canvas — no extra card wrapper. In showcase it goes edge
+            to edge (no rounding/border) so only the header frames it. */}
+        <section
+          className={`flex-1 min-h-0 overflow-hidden ${
+            showcase ? '' : 'lg:rounded-lg border-0 lg:border border-border'
+          }`}
+        >
           {renderActiveShader()}
         </section>
 
-        {/* Sidebar Backdrop for Mobile */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/60 z-30 lg:hidden transition-opacity"
-            onClick={() => setSidebarOpen(false)}
-          />
+        {/* Showcase: a single, deliberately faint shader-name label so the eye
+            stays on the art — no chrome, no icon, no theme, no progress bar. */}
+        {showcase && (
+          <span className="pointer-events-none absolute bottom-3 left-3 z-20 font-mono text-[11px] tracking-wide text-white/35 [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">
+            {modeDef.name}
+          </span>
         )}
 
-        {/* Constrained right sidebar of controls. */}
-        <aside
-          className={`sidebar-scroll fixed inset-y-0 right-0 z-40 w-[85vw] sm:w-95 bg-sidebar border-l border-border flex flex-col transform transition-transform duration-300 ease-in-out lg:static lg:w-85 lg:shrink-0 lg:h-full lg:flex lg:flex-col lg:bg-transparent lg:border-l-0 lg:translate-x-0 ${
-            sidebarOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
-        >
-          {/* Mobile Sidebar Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border lg:hidden shrink-0">
-            <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-              Shader Settings
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarOpen(false)}
-              aria-label="Close settings"
-            >
-              <X />
-            </Button>
-          </div>
+        {/* Sidebar (and its mobile backdrop) — hidden entirely in showcase. */}
+        {!showcase && (
+          <>
+            {/* Sidebar Backdrop for Mobile */}
+            {sidebarOpen && (
+              <div
+                className="fixed inset-0 bg-black/60 z-30 lg:hidden transition-opacity"
+                onClick={() => setSidebarOpen(false)}
+              />
+            )}
 
-          <div className="sidebar-scroll flex-1 overflow-y-auto p-4 lg:p-0">
-            <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground hidden lg:block">
-              {activeLabel}
-            </p>
-            <ControlPanel
-              config={config}
-              onChange={update}
-              onExportHtml={exportHtml}
-              onDownloadPng={downloadPng}
-            />
-          </div>
-        </aside>
+            {/* Constrained right sidebar of controls. */}
+            <aside
+              className={`sidebar-scroll fixed inset-y-0 right-0 z-40 w-[85vw] sm:w-95 bg-sidebar border-l border-border flex flex-col transform transition-transform duration-300 ease-in-out lg:static lg:w-85 lg:shrink-0 lg:h-full lg:flex lg:flex-col lg:bg-transparent lg:border-l-0 lg:translate-x-0 ${
+                sidebarOpen ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              {/* Mobile Sidebar Header */}
+              <div className="flex items-center justify-between p-4 border-b border-border lg:hidden shrink-0">
+                <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+                  Shader Settings
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(false)}
+                  aria-label="Close settings"
+                >
+                  <X />
+                </Button>
+              </div>
+
+              <div className="sidebar-scroll flex-1 overflow-y-auto p-4 lg:p-0">
+                <p className="mb-3 font-mono text-xs uppercase tracking-wider text-muted-foreground hidden lg:block">
+                  {activeLabel}
+                </p>
+                <ControlPanel
+                  config={config}
+                  onChange={update}
+                  onExportHtml={exportHtml}
+                  onDownloadPng={downloadPng}
+                />
+              </div>
+            </aside>
+          </>
+        )}
       </main>
     </div>
   );

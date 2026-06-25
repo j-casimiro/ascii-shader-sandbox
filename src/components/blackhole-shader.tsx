@@ -584,6 +584,7 @@ export function BlackholeShader({
 `
 
           return `<!DOCTYPE html>
+<!-- generated from ascii-shaders by github.com/j-casimiro -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
