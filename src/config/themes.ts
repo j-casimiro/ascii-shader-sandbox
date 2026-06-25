@@ -87,6 +87,18 @@ export const COLOR_THEMES: ColorTheme[] = [
     gradEnd: '#ff4455',
     mode: 0,
   },
+  {
+    // Tuned for the Aurora Haze mesh gradient (mode 12): a dark navy base, a
+    // deep-maroon shadow transition, a dominant raspberry-crimson accent, and a
+    // washed sky-blue for the cooler pools. White bloom is added in-shader.
+    id: 'aurora-haze',
+    name: 'Aurora Haze',
+    bg: '#0a0d18',
+    accent: '#d62950',
+    gradStart: '#3a0d1f',
+    gradEnd: '#a9cfe8',
+    mode: 2,
+  },
 ]
 
 /** Default theme: Amber CRT. */

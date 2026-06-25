@@ -37,6 +37,7 @@ const FRAGMENT_SHADER = `
   uniform float u_scale;
   uniform int   u_mode;
   uniform int   u_is_data_pass;
+  uniform int   u_glyph_overlay;   // mode 12: 1 = render the field as ASCII glyphs
 
   // Source-image uniforms (mode 3)
   uniform sampler2D u_image;
@@ -125,6 +126,50 @@ const FRAGMENT_SHADER = `
 
   vec3 sampleImage(vec2 uv) {
     return texture2D(u_image, imageUv(uv)).rgb;
+  }
+
+  // ── Aurora mesh-gradient (mode 12) ────────────────────────────────
+  // Inigo-Quilez-style domain-warped fBm: displace the sample point by a
+  // low-frequency flow field, then sample fBm at the warped position. The
+  // result reads as soft, organic colour blobs that drift diagonally. The
+  // secondary warp component g is returned alongside the primary field f
+  // so the colouriser can place the cooler blue pools independently of the
+  // dominant warm field — giving distinct crimson and blue regions rather
+  // than one blended ramp.
+  float auroraFields(vec2 uv, out float g) {
+    vec2 p = uv;
+    p.x *= u_resolution.x / u_resolution.y;     // aspect-correct so blobs stay round
+    p *= u_scale;                               // low u_scale -> large soft blobs
+    float t = u_time * 0.5;
+    p += vec2(0.7, 0.45) * t * 0.3;             // slow diagonal drift
+
+    vec2 q = vec2(fbm(p), fbm(p + vec2(5.2, 1.3)));
+    vec2 r = vec2(fbm(p + 2.0 * q + vec2(1.7, 9.2) + 0.15 * t),
+                  fbm(p + 2.0 * q + vec2(8.3, 2.8) - 0.12 * t));
+    g = r.x;
+    return fbm(p + 2.5 * r);
+  }
+
+  // Per-pixel smooth colour for the mesh gradient. Maps the two fields across
+  // the theme's four stops (bg -> gradStart -> solid, plus gradEnd pools) and
+  // adds a soft white bloom and fine film grain to match the reference look.
+  vec3 auroraColor(vec2 uv) {
+    float g;
+    float f = auroraFields(uv, g);
+
+    vec3 col = u_color_bg;                                              // navy base
+    col = mix(col, u_color_grad_start, smoothstep(0.20, 0.55, f));      // deep maroon
+    col = mix(col, u_color_solid,      smoothstep(0.40, 0.82, f));      // crimson
+    col = mix(col, u_color_grad_end,   smoothstep(0.55, 0.95, g) * 0.85); // blue pools
+
+    float bloom = smoothstep(0.72, 1.0, 0.6 * f + 0.6 * g);            // bright overlap
+    col = mix(col, vec3(1.0), bloom * 0.5);
+
+    float grain = hash(gl_FragCoord.xy * 1.7 + vec2(u_time)) - 0.5;
+    col += grain * 0.09;
+
+    col *= u_brightness;
+    return clamp(col, 0.0, 1.0);
   }
 
   // ── Effect intensity, branched on u_mode ──────────────────────────
@@ -297,6 +342,12 @@ const FRAGMENT_SHADER = `
       // Bold solid core + soft outer glow so thin ramps still read as a line.
       float line = smoothstep(0.085, 0.03, d) + 0.35 * smoothstep(0.2, 0.085, d);
       return clamp(line, 0.0, 1.0);
+    } else if (u_mode == 12) {
+      // Mode 12 — Aurora Haze (ASCII overlay path): the smooth mesh field
+      // sampled at the cell centre and mapped to glyph intensity. The smooth
+      // per-pixel colour path is handled directly in main().
+      float g;
+      return auroraFields(uv, g);
     }
     return 0.0;
   }
@@ -320,6 +371,15 @@ const FRAGMENT_SHADER = `
   }
 
   void main() {
+    // Mode 12 (Aurora Haze) smooth path: bypass the glyph atlas entirely and
+    // emit a per-pixel soft mesh gradient. The ASCII-overlay toggle
+    // (u_glyph_overlay == 1) falls through to the normal glyph pipeline below.
+    if (u_mode == 12 && u_glyph_overlay == 0 && u_is_data_pass == 0) {
+      vec2 puv = gl_FragCoord.xy / u_resolution;   // true per-pixel, not cell-snapped
+      gl_FragColor = vec4(auroraColor(puv), 1.0);
+      return;
+    }
+
     vec2 gridCoords  = floor(gl_FragCoord.xy / u_grid_size);   // which cell
     vec2 localCoords = fract(gl_FragCoord.xy / u_grid_size);   // where in the cell
     vec2 uv = (gridCoords + 0.5) * u_grid_size / u_resolution; // cell CENTER
@@ -390,6 +450,7 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
   const speedRef = useRef(config.speed)
   const brightnessRef = useRef(config.brightness)
   const modeRef = useRef(config.mode)
+  const auroraRealGraphicsRef = useRef(config.auroraRealGraphics)
   const imageActiveRef = useRef(imageActive)
   const imageUseColorsRef = useRef(config.imageUseColors)
   const colorModeRef = useRef(theme.mode)
@@ -406,6 +467,7 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
     speedRef.current = config.speed
     brightnessRef.current = config.brightness
     modeRef.current = config.mode
+    auroraRealGraphicsRef.current = config.auroraRealGraphics
     imageActiveRef.current = imageActive
     imageUseColorsRef.current = config.imageUseColors
     colorModeRef.current = theme.mode
@@ -579,6 +641,7 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
       'u_image_aspect',
       'u_use_image_colors',
       'u_is_data_pass',
+      'u_glyph_overlay',
     ]) {
       u[name] = gl.getUniformLocation(program, name)
     }
@@ -625,6 +688,8 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
       gl.uniform1i(u.u_mode, renderMode)
       gl.uniform1f(u.u_image_aspect, imageAspectRef.current)
       gl.uniform1i(u.u_use_image_colors, imageUseColorsRef.current ? 1 : 0)
+      // Real Graphics ON => smooth (overlay off); default OFF => ASCII glyphs.
+      gl.uniform1i(u.u_glyph_overlay, auroraRealGraphicsRef.current ? 0 : 1)
       gl.uniform1i(u.u_color_mode, colorModeRef.current)
       gl.uniform3fv(u.u_color_solid, colorSolidRef.current)
       gl.uniform3fv(u.u_color_grad_start, colorGradStartRef.current)
@@ -720,7 +785,7 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
     'u_font_atlas', 'u_resolution', 'u_grid_size', 'u_char_count', 'u_brightness',
     'u_time', 'u_scale', 'u_mode', 'u_color_mode', 'u_color_solid',
     'u_color_grad_start', 'u_color_grad_end', 'u_color_bg', 'u_image',
-    'u_image_aspect', 'u_use_image_colors', 'u_is_data_pass'
+    'u_image_aspect', 'u_use_image_colors', 'u_is_data_pass', 'u_glyph_overlay'
   ].forEach(name => {
     uniforms[name] = gl.getUniformLocation(program, name);
   });
@@ -815,6 +880,7 @@ export function ShaderCanvas({ config, theme, canvasRef, exportRef }: ShaderCanv
     gl.uniform1i(uniforms.u_mode, imageActive && imageTexture ? 3 : ${config.mode});
     gl.uniform1f(uniforms.u_image_aspect, imageAspect);
     gl.uniform1i(uniforms.u_use_image_colors, ${config.imageUseColors ? 1 : 0});
+    gl.uniform1i(uniforms.u_glyph_overlay, ${config.auroraRealGraphics ? 0 : 1});
     gl.uniform1i(uniforms.u_color_mode, ${theme.mode});
     gl.uniform3fv(uniforms.u_color_solid, colorSolid);
     gl.uniform3fv(uniforms.u_color_grad_start, colorGradStart);

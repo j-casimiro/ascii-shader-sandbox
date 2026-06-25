@@ -30,6 +30,7 @@ export type ShaderMode =
   | 9 // pewdiepie   (domain-warped wavy diagonal stripes)
   | 10 // truchet    (randomly oriented quarter-circle arc tiles)
   | 11 // truchet tiles (2-port multi-tile set; fixed cells that spin 90°, always connected)
+  | 12 // aurora haze (smooth domain-warped mesh gradient; ASCII overlay optional)
 
 /** A selectable color theme. */
 export interface ColorTheme {
@@ -84,7 +85,14 @@ export interface ShaderConfig {
   imageEnabled: boolean
   /** Source Image: passthrough the image's own colors instead of theme tint. */
   imageUseColors: boolean
+  /** Blackhole (mode 5) "Real Graphics (No ASCII)": false = ASCII, true = smooth. */
   showRealColors: boolean
+  /**
+   * Aurora Haze (mode 12) "Real Graphics (No ASCII)": false = ASCII, true =
+   * smooth mesh gradient. Independent of `showRealColors` so each effect keeps
+   * its own toggle state.
+   */
+  auroraRealGraphics: boolean
 }
 
 /**

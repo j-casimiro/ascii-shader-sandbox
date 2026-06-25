@@ -43,6 +43,7 @@ const INITIAL_CONFIG: ShaderConfig = {
   imageEnabled: false,
   imageUseColors: false,
   showRealColors: false,
+  auroraRealGraphics: false,
 };
 
 /** Container: owns live config, screensaver state, and renderer routing. */

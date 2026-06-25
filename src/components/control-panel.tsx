@@ -82,6 +82,18 @@ export function ControlPanel({
             />
           </div>
         )}
+        {config.mode === 12 && (
+          <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
+            <Label htmlFor="aurora-real-graphics" className="text-xs">
+              Real Graphics (No ASCII)
+            </Label>
+            <Switch
+              id="aurora-real-graphics"
+              checked={config.auroraRealGraphics}
+              onCheckedChange={(c) => onChange({ auroraRealGraphics: c })}
+            />
+          </div>
+        )}
       </ControlSection>
 
       {/* ── Source Image (dedicated input source, not an algorithm) ───── */}
