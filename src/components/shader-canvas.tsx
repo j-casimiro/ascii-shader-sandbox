@@ -288,12 +288,23 @@ const FRAGMENT_SHADER = `
 
       vec2 rnd = hash2(cell);
 
-      // Stepped quarter-turn: hold for the first ~65% of each beat (a clean,
-      // connected rest), then ease one 90° turn over the last ~35%. Per-cell
-      // rate + phase so cells turn independently, never as one marching wave.
-      float rate  = 0.25 + rnd.y * 0.6;
-      float beat  = u_time * rate + rnd.x * 12.566;       // + random phase
-      float turns = floor(beat) + smoothstep(0.65, 1.0, fract(beat));
+      // Staggered quarter-turns. The grid is split into GROUPS random groups,
+      // and they all share ONE slow cycle — but each group turns only inside its
+      // OWN slot of that cycle. So exactly one (randomly scattered) group eases a
+      // 90° turn at a time while every other tile rests, then the next group
+      // takes its turn, and so on. That avoids both failures: the messy pile-up
+      // of fully independent spins AND the dull all-at-once snap. Each tile turns
+      // once per cycle, so groups never drift out of step.
+      const float GROUPS = 6.0;
+      float grp   = floor(rnd.y * GROUPS);                // which group this cell joins
+      float rate  = 0.16;                                 // one shared cycle rate
+      float beat  = u_time * rate;
+      float cyc   = floor(beat);                          // completed full cycles
+      float ph    = fract(beat);                          // position within the cycle
+      // Turn window: a 0.12-wide ease inside this group's 1/GROUPS slot, leaving
+      // a gap before the next group starts (held before it, advanced after).
+      float start = grp / GROUPS;
+      float turns = cyc + smoothstep(start, start + 0.12, ph);
       float init  = floor(rnd.x * 4.0);                   // random load orientation
       float ang   = (turns + init) * 1.5707963;           // radians
 
