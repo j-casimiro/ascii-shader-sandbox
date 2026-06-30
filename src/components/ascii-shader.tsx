@@ -7,6 +7,7 @@ import {
   Shuffle,
   Square,
   X,
+  Coffee,
 } from 'lucide-react';
 
 const GithubIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -31,6 +32,7 @@ import { MatrixRainShader } from '@/components/matrix-rain-shader';
 import { CellularAutomataShader } from '@/components/cellular-automata-shader';
 
 import { useTheme } from '@/hooks/use-theme';
+import { useWakeLock } from '@/hooks/use-wake-lock';
 import { COLOR_THEMES, getTheme } from '@/config/themes';
 import {
   DEFAULT_CONFIG,
@@ -91,6 +93,9 @@ export function AsciiShader() {
     }
   });
   const { theme: uiTheme, toggleTheme } = useTheme();
+  // "Keep awake" lock for the full-screen view — surfaced as a minimalist
+  // toggle inside the screensaver overlay (never in the header).
+  const wakeLock = useWakeLock();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const exportRef = useRef<{ getHtml?: () => string } | null>(null);
@@ -111,6 +116,13 @@ export function AsciiShader() {
       window.removeEventListener('mousedown', exit);
     };
   }, [screensaver]);
+
+  // Leaving the full-screen view always drops the wake lock — never let a
+  // device stay awake after the user is no longer watching.
+  const disableWakeLock = wakeLock.disable;
+  useEffect(() => {
+    if (!screensaver) disableWakeLock();
+  }, [screensaver, disableWakeLock]);
 
   // ── Showcase cycling engine ────────────────────────────────────────────
   // While active, step LINEARLY through SHOWCASE_MODES — first to last, then
@@ -296,7 +308,40 @@ export function AsciiShader() {
   // ── Screensaver: cover the viewport; exits on key/click (listeners above).
   if (screensaver) {
     return (
-      <div className="fixed inset-0 z-50 bg-black">{renderActiveShader()}</div>
+      <div className="fixed inset-0 z-50 bg-black">
+        {renderActiveShader()}
+
+        {/* "Keep awake" toggle — bottom-right pill with an always-visible label.
+            stopPropagation on mousedown is essential: the overlay exits on any
+            window mousedown, so without it a click here would close the view
+            instead of toggling the lock. Glows amber while the lock is held.
+            Hidden where the API is absent. */}
+        {wakeLock.supported && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              wakeLock.toggle();
+            }}
+            aria-pressed={wakeLock.enabled}
+            aria-label={
+              wakeLock.enabled ? 'Allow screen to sleep' : 'Keep screen awake'
+            }
+            title={
+              wakeLock.enabled ? 'Keeping screen awake' : 'Keep screen awake'
+            }
+            className={`absolute bottom-4 right-4 z-10 flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider backdrop-blur-sm transition-all duration-300 ${
+              wakeLock.enabled
+                ? 'border-amber-300/60 bg-amber-300/15 text-amber-200 shadow-[0_0_12px_-2px_rgba(252,211,77,0.5)] hover:bg-amber-300/25'
+                : 'border-white/25 bg-black/50 text-white/85 hover:border-white/50 hover:text-white'
+            }`}
+          >
+            <Coffee className="size-4" />
+            <span>{wakeLock.enabled ? 'Awake' : 'Keep awake'}</span>
+          </button>
+        )}
+      </div>
     );
   }
 
